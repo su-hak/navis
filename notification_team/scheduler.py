@@ -1,0 +1,176 @@
+"""
+알림 / 리포트 팀 - 알림 전용 스케줄러
+백엔드 스케줄러와 독립적으로 운영 가능
+포함: 일일 리포트, 주간 리포트, 장중 포지션 현황
+"""
+import logging
+from datetime import datetime
+
+import httpx
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+
+from .config import config
+from .notifier import notifier
+from .report_builder import report_builder
+
+logger = logging.getLogger(__name__)
+
+
+async def _get_account_from_backend() -> dict:
+    """백엔드 API에서 계좌 정보 조회"""
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+            resp = await client.get(f"{config.BACKEND_URL}/dashboard/portfolio")
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("account") or {}
+    except Exception as e:
+        logger.warning(f"백엔드 계좌 조회 실패: {e}")
+        return {}
+
+
+async def _get_positions_from_backend() -> list:
+    """백엔드 API에서 포지션 조회"""
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+            resp = await client.get(f"{config.BACKEND_URL}/dashboard/portfolio")
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("positions") or []
+    except Exception as e:
+        logger.warning(f"백엔드 포지션 조회 실패: {e}")
+        return []
+
+
+async def job_daily_report():
+    """일일 리포트 발송 (16:10 ET)"""
+    logger.info("[스케줄] 일일 리포트 생성 중...")
+    account = await _get_account_from_backend()
+    ending_equity = float(account.get("equity", 0))
+    report = report_builder.build_daily_report(ending_equity=ending_equity)
+    await notifier.notify_daily_report(report)
+    logger.info(f"✓ 일일 리포트 발송 완료 (PnL ${report['realized_pnl']:+,.2f})")
+
+
+async def job_weekly_report():
+    """주간 리포트 발송 (금요일 16:30 ET)"""
+    logger.info("[스케줄] 주간 리포트 생성 중...")
+    weekly_data = report_builder.build_weekly_report()
+    await notifier.notify_weekly_report(weekly_data)
+    logger.info(f"✓ 주간 리포트 발송 완료 ({len(weekly_data)}거래일)")
+
+
+async def job_portfolio_status():
+    """장중 포지션 현황 알림 (설정된 간격마다)"""
+    logger.info("[스케줄] 포지션 현황 알림 발송 중...")
+    account = await _get_account_from_backend()
+    positions = await _get_positions_from_backend()
+
+    if not account:
+        logger.warning("계좌 정보 없음 - 포지션 현황 알림 생략")
+        return
+
+    today_stats = report_builder.db.get_today_stats()
+    await notifier.notify_portfolio_status(
+        equity=float(account.get("equity", 0)),
+        cash=float(account.get("cash", 0)),
+        positions=positions,
+        daily_pnl=today_stats.get("realized_pnl", 0.0),
+    )
+    logger.info("✓ 포지션 현황 알림 발송 완료")
+
+
+class NotificationScheduler:
+    """알림 전용 스케줄러"""
+
+    def __init__(self):
+        self.scheduler = AsyncIOScheduler(timezone="America/New_York")
+        self._is_running = False
+
+    def setup_jobs(self):
+        """알림 작업 등록"""
+
+        # ── 1. 일일 리포트 (16:10 ET, 월~금) ─────────────────
+        self.scheduler.add_job(
+            job_daily_report,
+            trigger=CronTrigger(
+                day_of_week="mon-fri",
+                hour=16,
+                minute=10,
+                timezone="America/New_York",
+            ),
+            id="daily_report",
+            name="일일 리포트",
+            replace_existing=True,
+            max_instances=1,
+        )
+        logger.info("✓ 일일 리포트 등록: 월~금 16:10 ET")
+
+        # ── 2. 주간 리포트 (금요일 16:30 ET) ─────────────────
+        self.scheduler.add_job(
+            job_weekly_report,
+            trigger=CronTrigger(
+                day_of_week=config.WEEKLY_REPORT_DOW,
+                hour=16,
+                minute=30,
+                timezone="America/New_York",
+            ),
+            id="weekly_report",
+            name="주간 리포트",
+            replace_existing=True,
+            max_instances=1,
+        )
+        logger.info(f"✓ 주간 리포트 등록: {config.WEEKLY_REPORT_DOW} 16:30 ET")
+
+        # ── 3. 장중 포지션 현황 (설정된 간격, 장중만) ─────────
+        if config.PORTFOLIO_STATUS_INTERVAL_MIN > 0:
+            self.scheduler.add_job(
+                job_portfolio_status,
+                trigger=IntervalTrigger(
+                    minutes=config.PORTFOLIO_STATUS_INTERVAL_MIN
+                ),
+                id="portfolio_status",
+                name="포지션 현황",
+                replace_existing=True,
+                max_instances=1,
+                misfire_grace_time=60,
+            )
+            logger.info(
+                f"✓ 포지션 현황 등록: 매 {config.PORTFOLIO_STATUS_INTERVAL_MIN}분"
+            )
+
+    def start(self):
+        if self._is_running:
+            return
+        self.setup_jobs()
+        self.scheduler.start()
+        self._is_running = True
+        jobs = [job.id for job in self.scheduler.get_jobs()]
+        logger.info(f"✓ 알림 스케줄러 시작: {jobs}")
+
+    def stop(self):
+        if not self._is_running:
+            return
+        self.scheduler.shutdown(wait=False)
+        self._is_running = False
+        logger.info("✓ 알림 스케줄러 중지")
+
+    def get_job_status(self) -> list:
+        return [
+            {
+                "id": job.id,
+                "name": job.name,
+                "next_run": job.next_run_time.isoformat() if job.next_run_time else None,
+            }
+            for job in self.scheduler.get_jobs()
+        ]
+
+    @property
+    def is_running(self) -> bool:
+        return self._is_running
+
+
+# 전역 인스턴스
+notification_scheduler = NotificationScheduler()
