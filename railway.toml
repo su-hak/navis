@@ -1,0 +1,8 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.trading_bot_v2"
+
+[deploy]
+startCommand = "python -u auto_trading_bot_v2.py"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

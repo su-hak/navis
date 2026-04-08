@@ -1,0 +1,18 @@
+# Strategy Engine API Requirements
+# For Railway Deployment
+
+# Core Dependencies
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Technical Analysis
+ta>=0.11.0
+
+# FastAPI and Server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Optional (if needed)
+python-multipart>=0.0.6

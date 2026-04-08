@@ -1,0 +1,25 @@
+# AI Team Minimal Dependencies
+# RAG 없이 뉴스 분석만 사용하는 최소 버전
+
+# Anthropic Claude API (필수)
+anthropic>=0.18.0
+
+# News Collection
+feedparser>=6.0.10
+beautifulsoup4>=4.12.0
+requests>=2.31.0
+
+# FastAPI
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# Pydantic
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Utilities
+python-dotenv>=1.0.0
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0

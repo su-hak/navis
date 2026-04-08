@@ -1,0 +1,50 @@
+# Railway 배포 시 제외할 파일/디렉토리
+# strategy_engine만 배포하고 나머지는 제외
+
+# 부모 디렉토리의 다른 모듈 제외 (상대 경로)
+../data_collection/
+../agents/
+../tools/
+../utils/
+../config/
+../logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Tests (배포 시 불필요)
+tests/__pycache__/
+*.pytest_cache/
+
+# Git
+.git/
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 로컬 설정
+.env
+*.local
+
+# 문서 (선택적으로 포함 가능)
+*.md

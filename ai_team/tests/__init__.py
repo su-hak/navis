@@ -1,0 +1,3 @@
+"""
+AI Team Tests
+"""

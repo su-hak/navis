@@ -1,0 +1,32 @@
+# Data Collection Module Requirements
+
+# Core
+python-dotenv==1.0.0
+pandas==2.2.0
+numpy==1.26.3
+
+# Alpaca API
+alpaca-py==0.20.2
+
+# Yahoo Finance
+yfinance==0.2.36
+
+# Web Scraping
+beautifulsoup4==4.12.3
+lxml>=5.3.0
+requests>=2.32.5
+aiohttp==3.9.3
+
+# Database
+mysql-connector-python==8.3.0
+
+# API Framework
+fastapi==0.109.2
+uvicorn==0.27.1
+pydantic>=2.7.4,<3.0.0
+
+# Scheduling
+APScheduler==3.10.4
+
+# Technical Indicators
+ta==0.11.0

@@ -1,0 +1,42 @@
+# AI Team Dependencies
+
+# Anthropic Claude API (필수)
+anthropic>=0.18.0
+
+# LangChain (2026년 1월 기준 권장 버전)
+# 참고: https://wikidocs.net/231362
+langchain>=1.0.0
+langchain-core>=1.0.0
+langchain-anthropic>=0.3.0
+langchain-community>=0.3.0
+langchain-text-splitters>=0.3.0
+
+# OpenAI API (선택적 - RAG embeddings용)
+openai>=1.12.0
+langchain-openai>=0.3.0
+
+# Vector Store
+faiss-cpu>=1.7.4  # For CPU (use faiss-gpu for GPU support)
+
+# News Collection
+feedparser>=6.0.10
+beautifulsoup4>=4.12.0
+
+# FastAPI
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# Pydantic
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Utilities
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Logging
+coloredlogs>=15.0.1

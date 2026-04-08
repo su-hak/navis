@@ -1,0 +1,473 @@
+"""
+자동매매 봇 V2 - 2단계 감시 시스템
+
+기획서 기반 구조:
+[Stage 1] 전체 시장 스캔 (3~5분) → 워치리스트 생성
+[Stage 2] 워치리스트 고주기 감시 (5~10초) → 즉시 실행
+"""
+import os
+import sys
+import asyncio
+import logging
+from datetime import datetime
+from typing import Optional
+from pathlib import Path
+from dotenv import load_dotenv
+
+# 현재 디렉토리를 Python 경로에 추가
+current_dir = Path(__file__).parent
+if str(current_dir) not in sys.path:
+    sys.path.insert(0, str(current_dir))
+
+# 환경 변수 로드
+load_dotenv()
+
+# 로깅 설정 (UTF-8 인코딩)
+import sys
+logging.basicConfig(
+    level=os.getenv('LOG_LEVEL', 'INFO'),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('logs/auto_trading_v2.log', encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+# Windows 콘솔 UTF-8 설정
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+logger = logging.getLogger(__name__)
+
+# 로그 디렉토리 생성
+os.makedirs('logs/execution', exist_ok=True)
+
+# 실행 팀 임포트
+try:
+    from execution_team.core import ExecutionEngine, OrderManager, OrderSignal, OrderAction, OrderType
+    from execution_team.brokers import AlpacaBroker
+except ImportError as e:
+    logger.error(f"Execution Team 임포트 실패: {e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+
+# 감시 시스템 임포트
+try:
+    from data_collection.monitoring import WatchlistGenerator, HighFrequencyMonitor
+except ImportError as e:
+    logger.error(f"Monitoring 모듈 임포트 실패: {e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+
+
+class AutoTradingBotV2:
+    """
+    자동매매 봇 V2 - 2단계 감시 시스템
+
+    [Stage 1] 전체 시장 스캔 (3~5분)
+        → gap > 3% or volume_ratio > 3배
+        → 상위 20개 워치리스트 생성
+
+    [Stage 2] 워치리스트 고주기 감시 (5~10초)
+        → 1.5% 변동 감지
+        → 즉시 매매 실행
+    """
+
+    def __init__(self):
+        """초기화"""
+        logger.info("=" * 70)
+        logger.info("자동매매 봇 V2 초기화 중...")
+        logger.info("=" * 70)
+
+        # 설정 로드
+        self.auto_trading_enabled = os.getenv('AUTO_TRADING_ENABLED', 'false').lower() == 'true'
+
+        # Stage 1 설정 (전체 시장 스캔)
+        self.market_scan_interval = int(os.getenv('MARKET_SCAN_INTERVAL_MINUTES', '5'))  # 3~5분
+        self.gap_threshold = float(os.getenv('GAP_THRESHOLD', '3.0'))  # 3%
+        self.volume_ratio_threshold = float(os.getenv('VOLUME_RATIO_THRESHOLD', '3.0'))  # 3배
+        self.max_watchlist_size = int(os.getenv('MAX_WATCHLIST_SIZE', '20'))
+
+        # Stage 2 설정 (고주기 감시)
+        self.monitor_interval = int(os.getenv('MONITOR_INTERVAL_SECONDS', '10'))  # 5~10초
+        self.price_change_threshold = float(os.getenv('PRICE_CHANGE_THRESHOLD', '1.5'))  # 1.5%
+
+        # 리스크 관리 (기획서: 1회 10%, 손절 -2%, 일일 -5%)
+        self.max_investment_percent = float(os.getenv('MAX_INVESTMENT_PERCENT', '10.0'))
+        self.stop_loss_percent = float(os.getenv('STOP_LOSS_PERCENT', '2.0'))
+        self.max_daily_loss_percent = float(os.getenv('MAX_DAILY_LOSS_PERCENT', '5.0'))
+        self.max_positions = int(os.getenv('MAX_POSITIONS', '5'))
+
+        # 알파카 API 키 (경고 메시지 전에 먼저 설정)
+        self.api_key = os.getenv('ALPACA_API_KEY')
+        self.api_secret = os.getenv('ALPACA_SECRET_KEY')
+        self.base_url = os.getenv('ALPACA_BASE_URL', 'https://paper-api.alpaca.markets')
+
+        # 설정 출력
+        logger.info(f"자동매매 활성화: {self.auto_trading_enabled}")
+        if self.auto_trading_enabled:
+            logger.warning("=" * 70)
+            logger.warning("!!! 자동매매가 활성화되어 있습니다 !!!")
+            logger.warning("!!! 실제 주문이 실행될 수 있습니다 !!!")
+            logger.warning(f"!!! 브로커: {self.base_url}")
+            logger.warning("=" * 70)
+
+        logger.info(f"[Stage 1] 시장 스캔 주기: {self.market_scan_interval}분")
+        logger.info(f"[Stage 1] 워치리스트 조건: 갭>{self.gap_threshold}% or 거래량>{self.volume_ratio_threshold}배")
+        logger.info(f"[Stage 2] 모니터링 주기: {self.monitor_interval}초")
+        logger.info(f"[Stage 2] 변동 임계값: {self.price_change_threshold}%")
+        logger.info(f"[리스크] 1회 투자: {self.max_investment_percent}%, 손절: -{self.stop_loss_percent}%, 일일 손실: -{self.max_daily_loss_percent}%")
+
+        if not self.api_key or not self.api_secret:
+            raise ValueError("ALPACA_API_KEY와 ALPACA_SECRET_KEY를 설정하세요")
+
+        # 컴포넌트 초기화
+        self._init_execution_team()
+        self._init_monitoring_system()
+
+        # 상태 추적
+        self.daily_pl = 0.0
+        self.trade_count = 0
+        self.is_running = False
+
+        logger.info("✓ 자동매매 봇 V2 초기화 완료")
+
+    def _init_execution_team(self):
+        """Execution Team 초기화"""
+        logger.info("\n[1] Execution Team 초기화 중...")
+
+        try:
+            # 브로커 연결
+            broker_config = {
+                'api_key': self.api_key,
+                'secret_key': self.api_secret,
+                'base_url': self.base_url
+            }
+
+            self.broker = AlpacaBroker(broker_config)
+            self.broker.connect()
+            logger.info(f"✓ 브로커 연결 성공 ({self.base_url})")
+
+            # 주문 관리자
+            self.order_manager = OrderManager(
+                storage_path=os.getenv('ORDER_STORAGE_PATH', 'logs/execution/orders')
+            )
+            logger.info("✓ 주문 관리자 초기화 완료")
+
+            # 실행 엔진
+            self.execution_engine = ExecutionEngine(
+                broker=self.broker,
+                order_manager=self.order_manager,
+                enable_circuit_breaker=True
+            )
+            logger.info("✓ 실행 엔진 초기화 완료")
+
+            # 계좌 정보
+            account = self.execution_engine.get_account()
+            logger.info(f"✓ 계좌 자산: ${account.equity:,.2f}")
+
+        except Exception as e:
+            logger.error(f"✗ Execution Team 초기화 실패: {e}")
+            raise
+
+    def _init_monitoring_system(self):
+        """모니터링 시스템 초기화"""
+        logger.info("\n[2] Monitoring System 초기화 중...")
+
+        try:
+            # 워치리스트 생성기 (Stage 1)
+            self.watchlist_generator = WatchlistGenerator(
+                api_key=self.api_key,
+                api_secret=self.api_secret,
+                gap_threshold=self.gap_threshold,
+                volume_ratio_threshold=self.volume_ratio_threshold,
+                max_watchlist_size=self.max_watchlist_size
+            )
+            logger.info("✓ 워치리스트 생성기 초기화 완료")
+
+            # 고주기 모니터 (Stage 2)
+            self.high_freq_monitor = HighFrequencyMonitor(
+                api_key=self.api_key,
+                api_secret=self.api_secret,
+                monitor_interval=self.monitor_interval,
+                price_change_threshold=self.price_change_threshold,
+                callback=self._on_price_spike  # 신호 발생 시 콜백
+            )
+            logger.info("✓ 고주기 모니터 초기화 완료")
+
+        except Exception as e:
+            logger.error(f"✗ Monitoring System 초기화 실패: {e}")
+            raise
+
+    async def _on_price_spike(self, signal: dict):
+        """
+        가격 급등/급락 감지 시 콜백
+
+        Args:
+            signal: {
+                'symbol': str,
+                'prev_price': float,
+                'current_price': float,
+                'change_percent': float,
+                'direction': 'UP' or 'DOWN',
+                'timestamp': datetime,
+                'reason': str
+            }
+        """
+        logger.warning(f"\n{'=' * 70}")
+        logger.warning(f"⚡ 가격 급변 감지!")
+        logger.warning(f"  종목: {signal['symbol']}")
+        logger.warning(f"  변동: {signal['change_percent']:+.2f}% ({signal['direction']})")
+        logger.warning(f"  가격: ${signal['prev_price']:.2f} → ${signal['current_price']:.2f}")
+        logger.warning(f"  시각: {signal['timestamp'].strftime('%H:%M:%S')}")
+        logger.warning(f"{'=' * 70}\n")
+
+        # 리스크 체크
+        if not self.check_risk_limits():
+            logger.error("리스크 한계 초과 - 거래 중단")
+            return
+
+        # 자동매매 활성화 확인
+        if not self.auto_trading_enabled:
+            logger.warning("⚠️ 자동매매 비활성화 - 시뮬레이션 모드")
+            return
+
+        # 매매 신호 생성 및 실행
+        try:
+            # 상승일 때만 매수 (하락은 공매도 필요)
+            if signal['direction'] == 'UP':
+                await self._execute_buy_signal(signal)
+            else:
+                logger.info(f"하락 신호는 현재 무시 (공매도 미지원)")
+
+        except Exception as e:
+            logger.error(f"신호 처리 중 오류: {e}")
+
+    async def _execute_buy_signal(self, signal: dict):
+        """
+        매수 신호 실행
+
+        Args:
+            signal: 가격 급등 신호
+        """
+        symbol = signal['symbol']
+
+        # 포지션 수 확인
+        positions = self.execution_engine.get_positions()
+        if len(positions) >= self.max_positions:
+            logger.warning(f"최대 포지션 수 도달 ({len(positions)}/{self.max_positions}) - 매수 불가")
+            return
+
+        # 이미 보유 중인지 확인
+        if any(p.symbol == symbol for p in positions):
+            logger.info(f"{symbol} 이미 보유 중 - 중복 매수 방지")
+            return
+
+        # 투자 금액 계산
+        account = self.execution_engine.get_account()
+        current_cash = account.cash
+        investment_amount = current_cash * (self.max_investment_percent / 100.0)
+
+        # 수량 계산
+        quantity = int(investment_amount / signal['current_price'])
+        if quantity == 0:
+            logger.warning(f"투자 금액 부족: ${investment_amount:.2f} < ${signal['current_price']:.2f}")
+            return
+
+        # 주문 생성
+        order_signal = OrderSignal(
+            symbol=symbol,
+            action=OrderAction.BUY,
+            order_type=OrderType.MARKET,
+            quantity=quantity,
+            strategy_id="high_freq_monitor_v2",
+            reason=signal['reason']
+        )
+
+        logger.info(f"\n매수 주문 실행:")
+        logger.info(f"  종목: {symbol}")
+        logger.info(f"  수량: {quantity}주")
+        logger.info(f"  예상 투자금: ${investment_amount:.2f}")
+        logger.info(f"  이유: {signal['reason']}")
+
+        # 주문 실행
+        result = self.execution_engine.execute_order(order_signal)
+
+        if result.success:
+            logger.info(f"✓ 매수 성공!")
+            logger.info(f"  주문 ID: {result.order_id}")
+            logger.info(f"  체결가: ${result.filled_price:.2f}")
+            logger.info(f"  체결 수량: {result.filled_quantity}주")
+            self.trade_count += 1
+        else:
+            logger.error(f"✗ 매수 실패: {result.error_message}")
+
+    def check_risk_limits(self) -> bool:
+        """
+        리스크 한계 확인
+
+        기획서 요구사항:
+        - 1회 투자: 10%
+        - 손절: -2%
+        - 하루 손실: -5%
+        """
+        account = self.execution_engine.get_account()
+        current_cash = account.cash
+
+        # 일일 손실 계산
+        self.daily_pl = account.unrealized_pl
+
+        # 손실 한계
+        max_loss_amount = current_cash * (self.max_daily_loss_percent / 100.0)
+
+        if abs(self.daily_pl) > max_loss_amount:
+            logger.error(f"⚠️ 일일 최대 손실 도달!")
+            logger.error(f"  현재 손익: ${self.daily_pl:,.2f}")
+            logger.error(f"  한계: ${max_loss_amount:,.2f} ({self.max_daily_loss_percent}%)")
+            return False
+
+        # 개별 포지션 손절 체크
+        positions = self.execution_engine.get_positions()
+        for position in positions:
+            position_pl_percent = (position.unrealized_pl / position.cost_basis) * 100.0
+
+            if position_pl_percent < -self.stop_loss_percent:
+                logger.warning(f"⚠️ {position.symbol} 손절 필요: {position_pl_percent:.2f}%")
+                # 자동 손절 실행 (옵션)
+                # self._execute_stop_loss(position)
+
+        return True
+
+    def _is_market_hours(self) -> bool:
+        """미국 시장 시간인지 확인 (간단 체크)"""
+        from datetime import timezone, timedelta
+
+        # 미국 동부시간 (ET)
+        et_tz = timezone(timedelta(hours=-5))  # EST (겨울) / EDT는 -4
+        now_et = datetime.now(et_tz)
+
+        # 주말 체크
+        if now_et.weekday() >= 5:  # 토요일(5), 일요일(6)
+            return False
+
+        # 시장 시간: 9:30 AM ~ 4:00 PM ET
+        market_open = now_et.replace(hour=9, minute=30, second=0)
+        market_close = now_et.replace(hour=16, minute=0, second=0)
+
+        return market_open <= now_et <= market_close
+
+    async def _stage1_market_scan(self):
+        """
+        Stage 1: 전체 시장 스캔 및 워치리스트 생성
+
+        3~5분마다 실행
+        """
+        while self.is_running:
+            try:
+                logger.info(f"\n{'=' * 70}")
+                logger.info(f"[Stage 1] 전체 시장 스캔 시작")
+                logger.info(f"  시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+                # 시장 시간 체크
+                is_market_hours = self._is_market_hours()
+                logger.info(f"  미국 시장 시간: {'YES (장중)' if is_market_hours else 'NO (장외)'}")
+                if not is_market_hours:
+                    logger.warning("  장외 시간이므로 워치리스트가 비어있을 수 있습니다")
+
+                logger.info(f"{'=' * 70}")
+
+                # 워치리스트 생성
+                watchlist = await self.watchlist_generator.generate_watchlist()
+
+                if watchlist:
+                    logger.info(f"\n워치리스트 갱신:")
+                    for i, stock in enumerate(watchlist[:10], 1):
+                        logger.info(f"  {i}. {stock['symbol']}: {stock['reason']}")
+
+                    # Stage 2 모니터에 워치리스트 전달
+                    self.high_freq_monitor.set_watchlist(watchlist)
+
+                    # 모니터 시작 (처음만)
+                    if not self.high_freq_monitor.is_running:
+                        await self.high_freq_monitor.start()
+                else:
+                    logger.warning("워치리스트가 비어있습니다")
+
+                # 다음 스캔까지 대기
+                logger.info(f"\n다음 시장 스캔까지 {self.market_scan_interval}분 대기...")
+                await asyncio.sleep(self.market_scan_interval * 60)
+
+            except Exception as e:
+                logger.error(f"Stage 1 오류: {e}")
+                await asyncio.sleep(60)  # 오류 시 1분 대기
+
+    async def run_async(self):
+        """메인 비동기 루프"""
+        logger.info("\n" + "=" * 70)
+        logger.info("🚀 자동매매 봇 V2 시작!")
+        logger.info("=" * 70)
+
+        if not self.auto_trading_enabled:
+            logger.warning("\n⚠️⚠️⚠️ 자동매매가 비활성화되어 있습니다 ⚠️⚠️⚠️")
+            logger.warning("시뮬레이션 모드로 실행됩니다 (실제 주문 없음)")
+            logger.warning("AUTO_TRADING_ENABLED=true로 설정하세요.\n")
+
+        self.is_running = True
+
+        try:
+            # Stage 1 태스크 시작 (Stage 2는 Stage 1에서 자동으로 시작)
+            await self._stage1_market_scan()
+
+        except asyncio.CancelledError:
+            logger.info("\n태스크 취소됨")
+        except Exception as e:
+            logger.error(f"치명적 오류: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            await self.cleanup()
+
+    def run(self):
+        """메인 진입점 (동기)"""
+        try:
+            asyncio.run(self.run_async())
+        except KeyboardInterrupt:
+            logger.info("\n사용자에 의해 중단됨")
+
+    async def cleanup(self):
+        """정리"""
+        logger.info("\n자동매매 봇 V2 종료 중...")
+
+        self.is_running = False
+
+        try:
+            # 모니터 중지
+            if hasattr(self, 'high_freq_monitor'):
+                await self.high_freq_monitor.stop()
+                logger.info("✓ 고주기 모니터 중지")
+
+            # 브로커 연결 해제
+            if hasattr(self, 'broker'):
+                self.broker.disconnect()
+                logger.info("✓ 브로커 연결 해제")
+
+        except Exception as e:
+            logger.error(f"정리 중 오류: {e}")
+
+        logger.info("✓ 자동매매 봇 V2 종료 완료")
+
+
+def main():
+    """메인 함수"""
+    try:
+        bot = AutoTradingBotV2()
+        bot.run()
+    except Exception as e:
+        logger.error(f"봇 시작 실패: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
