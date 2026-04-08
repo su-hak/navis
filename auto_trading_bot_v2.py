@@ -24,11 +24,17 @@ load_dotenv()
 
 # 로깅 설정 (UTF-8 인코딩)
 import sys
+import logging.handlers
 logging.basicConfig(
     level=os.getenv('LOG_LEVEL', 'INFO'),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('logs/auto_trading_v2.log', encoding='utf-8'),
+        logging.handlers.RotatingFileHandler(
+            'logs/auto_trading_v2.log',
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=3,
+            encoding='utf-8'
+        ),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -362,8 +368,10 @@ class AutoTradingBotV2:
 
         3~5분마다 실행
         """
+        scan_count = 0
         while self.is_running:
             try:
+                scan_count += 1
                 logger.info(f"\n{'=' * 70}")
                 logger.info(f"[Stage 1] 전체 시장 스캔 시작")
                 logger.info(f"  시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -392,6 +400,12 @@ class AutoTradingBotV2:
                         await self.high_freq_monitor.start()
                 else:
                     logger.warning("워치리스트가 비어있습니다")
+
+                # 1시간마다(약 12회 스캔) 오래된 주문 메모리 정리
+                if scan_count % 12 == 0 and hasattr(self, 'order_manager') and self.order_manager:
+                    deleted = self.order_manager.clear_old_orders(days=7)
+                    if deleted:
+                        logger.info(f"[메모리 정리] 오래된 주문 {deleted}개 삭제 완료")
 
                 # 다음 스캔까지 대기
                 logger.info(f"\n다음 시장 스캔까지 {self.market_scan_interval}분 대기...")

@@ -1,5 +1,6 @@
 # AI Team Dependencies
 
+<<<<<<< HEAD
 # Anthropic Claude API (필수)
 anthropic>=0.18.0
 
@@ -14,6 +15,21 @@ langchain-text-splitters>=0.3.0
 # OpenAI API (선택적 - RAG embeddings용)
 openai>=1.12.0
 langchain-openai>=0.3.0
+=======
+# Anthropic Claude API
+anthropic>=0.18.0
+
+# LangChain
+langchain>=0.1.0
+langchain-anthropic>=0.1.0
+langchain-community>=0.0.20
+langchain-core>=0.1.0
+langchain-text-splitters>=0.0.1
+
+# OpenAI API (선택적 - RAG embeddings용)
+openai>=1.12.0
+langchain-openai>=0.0.5
+>>>>>>> 5d86c4230b98765d8b230668bae5a6132ebd7a55
 
 # Vector Store
 faiss-cpu>=1.7.4  # For CPU (use faiss-gpu for GPU support)

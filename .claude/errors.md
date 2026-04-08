@@ -1,132 +1,70 @@
-Starting Container
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/requests.py", line 4, in <module>
-    import pytz
-ModuleNotFoundError: No module named 'pytz'
-  File "/app/data_collection/monitoring/watchlist_generator.py", line 12, in <module>
-    from alpaca.data import StockHistoricalDataClient
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/__init__.py", line 4, in <module>
-2026-04-08 12:47:53,249 - __main__ - ERROR - Monitoring 모듈 임포트 실패: No module named 'pytz'
-Traceback (most recent call last):
-    from alpaca.data.requests import *
-  File "/app/auto_trading_bot_v2.py", line 55, in <module>
-    from data_collection.monitoring import WatchlistGenerator, HighFrequencyMonitor
-  File "/app/data_collection/monitoring/__init__.py", line 5, in <module>
-    from .watchlist_generator import WatchlistGenerator
-2026-04-08 12:47:54,875 - __main__ - ERROR - Monitoring 모듈 임포트 실패: No module named 'pytz'
-Traceback (most recent call last):
-  File "/app/auto_trading_bot_v2.py", line 55, in <module>
-    from data_collection.monitoring import WatchlistGenerator, HighFrequencyMonitor
-  File "/app/data_collection/monitoring/__init__.py", line 5, in <module>
-    from .watchlist_generator import WatchlistGenerator
-  File "/app/data_collection/monitoring/watchlist_generator.py", line 12, in <module>
-    from alpaca.data import StockHistoricalDataClient
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/__init__.py", line 4, in <module>
-    from alpaca.data.requests import *
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/requests.py", line 4, in <module>
-    import pytz
-ModuleNotFoundError: No module named 'pytz'
-    import pytz
-Traceback (most recent call last):
-ModuleNotFoundError: No module named 'pytz'
-  File "/app/auto_trading_bot_v2.py", line 55, in <module>
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/__init__.py", line 4, in <module>
-    from data_collection.monitoring import WatchlistGenerator, HighFrequencyMonitor
-  File "/app/data_collection/monitoring/__init__.py", line 5, in <module>
-    from alpaca.data.requests import *
-    from .watchlist_generator import WatchlistGenerator
-2026-04-08 12:47:56,652 - __main__ - ERROR - Monitoring 모듈 임포트 실패: No module named 'pytz'
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/requests.py", line 4, in <module>
-  File "/app/data_collection/monitoring/watchlist_generator.py", line 12, in <module>
-    from alpaca.data import StockHistoricalDataClient
-2026-04-08 12:47:58,200 - __main__ - ERROR - Monitoring 모듈 임포트 실패: No module named 'pytz'
-Traceback (most recent call last):
-  File "/app/auto_trading_bot_v2.py", line 55, in <module>
-    from data_collection.monitoring import WatchlistGenerator, HighFrequencyMonitor
-  File "/app/data_collection/monitoring/__init__.py", line 5, in <module>
-    from .watchlist_generator import WatchlistGenerator
-  File "/app/data_collection/monitoring/watchlist_generator.py", line 12, in <module>
-    from alpaca.data import StockHistoricalDataClient
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/__init__.py", line 4, in <module>
-    from alpaca.data.requests import *
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/requests.py", line 4, in <module>
-    import pytz
-    ModuleNotFoundError: No module named 'pytz'
-Traceback (most recent call last):
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/requests.py", line 4, in <module>
-    import pytz
-  File "/app/auto_trading_bot_v2.py", line 55, in <module>
-ModuleNotFoundError: No module named 'pytz'
-    from data_collection.monitoring import WatchlistGenerator, HighFrequencyMonitor
-    from .watchlist_generator import WatchlistGenerator
-  File "/app/data_collection/monitoring/__init__.py", line 5, in <module>
-  File "/app/data_collection/monitoring/watchlist_generator.py", line 12, in <module>
-    from alpaca.data import StockHistoricalDataClient
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/__init__.py", line 4, in <module>
-    from alpaca.data.requests import *
-2026-04-08 12:48:00,000 - __main__ - ERROR - Monitoring 모듈 임포트 실패: No module named 'pytz'
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/__init__.py", line 4, in <module>
-    from alpaca.data.requests import *
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/requests.py", line 4, in <module>
-    import pytz
-ModuleNotFoundError: No module named 'pytz'
-2026-04-08 12:48:01,836 - __main__ - ERROR - Monitoring 모듈 임포트 실패: No module named 'pytz'
-Traceback (most recent call last):
-  File "/app/auto_trading_bot_v2.py", line 55, in <module>
-    from data_collection.monitoring import WatchlistGenerator, HighFrequencyMonitor
-  File "/app/data_collection/monitoring/__init__.py", line 5, in <module>
-    from .watchlist_generator import WatchlistGenerator
-  File "/app/data_collection/monitoring/watchlist_generator.py", line 12, in <module>
-    from alpaca.data import StockHistoricalDataClient
-2026-04-08 12:48:03,469 - __main__ - ERROR - Monitoring 모듈 임포트 실패: No module named 'pytz'
-Traceback (most recent call last):
-  File "/app/auto_trading_bot_v2.py", line 55, in <module>
-    from data_collection.monitoring import WatchlistGenerator, HighFrequencyMonitor
-  File "/app/data_collection/monitoring/__init__.py", line 5, in <module>
-    from .watchlist_generator import WatchlistGenerator
-  File "/app/data_collection/monitoring/watchlist_generator.py", line 12, in <module>
-    from alpaca.data import StockHistoricalDataClient
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/__init__.py", line 4, in <module>
-    from alpaca.data.requests import *
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/requests.py", line 4, in <module>
-    import pytz
-ModuleNotFoundError: No module named 'pytz'
-2026-04-08 12:48:05,108 - __main__ - ERROR - Monitoring 모듈 임포트 실패: No module named 'pytz'
-Traceback (most recent call last):
-  File "/app/auto_trading_bot_v2.py", line 55, in <module>
-    from data_collection.monitoring import WatchlistGenerator, HighFrequencyMonitor
-  File "/app/data_collection/monitoring/__init__.py", line 5, in <module>
-    from .watchlist_generator import WatchlistGenerator
-  File "/app/data_collection/monitoring/watchlist_generator.py", line 12, in <module>
-    from alpaca.data import StockHistoricalDataClient
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/__init__.py", line 4, in <module>
-    from alpaca.data.requests import *
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/requests.py", line 4, in <module>
-    import pytz
-ModuleNotFoundError: No module named 'pytz'
-2026-04-08 12:48:07,140 - __main__ - ERROR - Monitoring 모듈 임포트 실패: No module named 'pytz'
-Traceback (most recent call last):
-  File "/app/auto_trading_bot_v2.py", line 55, in <module>
-    from data_collection.monitoring import WatchlistGenerator, HighFrequencyMonitor
-  File "/app/data_collection/monitoring/__init__.py", line 5, in <module>
-    from .watchlist_generator import WatchlistGenerator
-  File "/app/data_collection/monitoring/watchlist_generator.py", line 12, in <module>
-    from alpaca.data import StockHistoricalDataClient
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/__init__.py", line 4, in <module>
-    from alpaca.data.requests import *
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/requests.py", line 4, in <module>
-    import pytz
-Traceback (most recent call last):
-    from data_collection.monitoring import WatchlistGenerator, HighFrequencyMonitor
-    import pytz
-  File "/app/data_collection/monitoring/__init__.py", line 5, in <module>
-ModuleNotFoundError: No module named 'pytz'
-    from .watchlist_generator import WatchlistGenerator
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/__init__.py", line 4, in <module>
-2026-04-08 12:48:11,268 - __main__ - ERROR - Monitoring 모듈 임포트 실패: No module named 'pytz'
-Traceback (most recent call last):
-  File "/app/data_collection/monitoring/__init__.py", line 5, in <module>
-    from .watchlist_generator import WatchlistGenerator
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/__init__.py", line 4, in <module>
-    from alpaca.data.requests import *
-  File "/usr/local/lib/python3.11/site-packages/alpaca/data/requests.py", line 4, in <module>
-    import pytz
+[Region: us-west1]
+=========================
+Using Detected Dockerfile
+=========================
+
+context: 06fw-Xt_o
+
+internal
+load build definition from Dockerfile
+0ms
+
+internal
+load metadata for docker.io/library/python:3.11-slim
+321ms
+
+auth
+library/python:pull token for registry-1.docker.io
+0ms
+
+internal
+load .dockerignore
+0ms
+
+internal
+load build context
+0ms
+
+2
+WORKDIR /app cached
+1ms
+
+3
+RUN apt-get update && apt-get install -y     gcc     g++     && rm -rf /var/lib/apt/lists/*
+10s
+Processing triggers for libc-bin (2.41-12+deb13u2) ...
+
+4
+COPY requirements.txt .
+50ms
+
+5
+RUN pip install --no-cache-dir -r requirements.txt
+37s
+[notice] To update, run: pip install --upgrade pip
+
+6
+COPY . .
+150ms
+
+auth
+sharing credentials for production-us-west2.railway-registry.com
+0ms
+Build time: 87.30 seconds
+ 
+====================
+Starting Healthcheck
+====================
+Path: /health
+Retry window: 1m40s
+ 
+Attempt #1 failed with service unavailable. Continuing to retry for 1m29s
+Attempt #2 failed with service unavailable. Continuing to retry for 1m18s
+Attempt #3 failed with service unavailable. Continuing to retry for 1m6s
+Attempt #4 failed with service unavailable. Continuing to retry for 52s
+Attempt #5 failed with service unavailable. Continuing to retry for 34s
+Attempt #6 failed with service unavailable. Continuing to retry for 8s
+ 
+1/1 replicas never became healthy!
+
+Healthcheck failed!
