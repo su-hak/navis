@@ -14,11 +14,11 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 애플리케이션 코드 복사
-COPY . .
+# 애플리케이션 코드 복사 (ai_team 패키지 구조 유지)
+COPY . ./ai_team/
 
 # 포트 설정
 EXPOSE 8001
 
 # API 서버 실행
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["uvicorn", "ai_team.api.main:app", "--host", "0.0.0.0", "--port", "8001"]
