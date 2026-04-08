@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# risk_team이 execution_team 모델을 임포트하므로 둘 다 복사
+COPY execution_team/ ./execution_team/
+COPY risk_team/ ./risk_team/
+
+ENV TZ=America/New_York
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+ENV PYTHONPATH=/app
+
+RUN mkdir -p /app/logs/risk/daily
+
+CMD uvicorn risk_team.api:app --host 0.0.0.0 --port ${PORT:-8002}
