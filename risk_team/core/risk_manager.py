@@ -5,9 +5,7 @@
 import logging
 from typing import List, Optional, Tuple
 
-from execution_team.core.order_models import (
-    OrderSignal, OrderAction, AccountInfo, Position
-)
+from .risk_models import OrderSignal, OrderAction, AccountInfo, Position
 
 from .risk_models import RiskAction, RiskDecision, RiskStatus, RejectReason
 from .position_sizer import PositionSizer
@@ -87,7 +85,7 @@ class RiskManager:
         실제 주문 실행 전에 반드시 이 함수를 통과해야 함
 
         Args:
-            signal: 주문 신호 (execution_team.OrderSignal)
+            signal: 주문 신호 (OrderSignal)
             account: 현재 계좌 정보
             positions: 현재 보유 포지션 목록
             current_price: 종목 현재가

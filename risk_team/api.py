@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from .core import RiskManager, RiskDecision, RiskStatus
+from .core.risk_models import OrderSignal, OrderAction, OrderType, AccountInfo, Position
 from .config import config
 
 logging.basicConfig(level=config.log_level, format=config.log_format)
@@ -135,10 +136,6 @@ async def check_order(req: CheckOrderRequest):
         raise HTTPException(status_code=503, detail="RiskManager 초기화 안됨")
 
     try:
-        from execution_team.core.order_models import (
-            OrderSignal, OrderAction, OrderType, AccountInfo, Position
-        )
-
         # OrderSignal 변환
         signal = OrderSignal(
             symbol=req.symbol,
@@ -219,8 +216,6 @@ async def get_risk_status(
     """
     if not risk_manager:
         raise HTTPException(status_code=503, detail="RiskManager 초기화 안됨")
-
-    from execution_team.core.order_models import AccountInfo
 
     account = AccountInfo(
         account_id="query",

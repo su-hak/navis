@@ -1,11 +1,79 @@
 """
 리스크 관리 팀 - 데이터 모델
 모든 리스크 관련 데이터 구조 정의
+
+주문/계좌/포지션 모델을 로컬에 정의하여
+execution_team Python 의존성 없이 독립 배포 가능
 """
 from enum import Enum
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
+import uuid
 from pydantic import BaseModel, Field
+
+
+# ============ 주문/계좌/포지션 모델 (execution_team 독립) ============
+
+class OrderAction(str, Enum):
+    BUY = "BUY"
+    SELL = "SELL"
+
+
+class OrderType(str, Enum):
+    MARKET = "MARKET"
+    LIMIT = "LIMIT"
+    STOP = "STOP"
+    STOP_LIMIT = "STOP_LIMIT"
+
+
+class TimeInForce(str, Enum):
+    DAY = "DAY"
+    GTC = "GTC"
+    IOC = "IOC"
+    FOK = "FOK"
+
+
+class OrderSignal(BaseModel):
+    """전략 엔진 / AI 팀에서 전달하는 매매 신호"""
+    symbol: str
+    action: OrderAction
+    order_type: OrderType = OrderType.MARKET
+    quantity: int
+    limit_price: Optional[float] = None
+    stop_price: Optional[float] = None
+    time_in_force: TimeInForce = TimeInForce.DAY
+    strategy_id: Optional[str] = None
+    reason: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AccountInfo(BaseModel):
+    """브로커 계좌 정보"""
+    account_id: str
+    cash: float
+    portfolio_value: float
+    buying_power: float
+    equity: float
+    unrealized_pl: float
+    realized_pl: float
+    daytrade_count: Optional[int] = None
+    pattern_day_trader: bool = False
+    last_updated: datetime = Field(default_factory=datetime.now)
+
+
+class Position(BaseModel):
+    """현재 보유 포지션"""
+    symbol: str
+    quantity: int
+    avg_entry_price: float
+    current_price: float
+    market_value: float
+    unrealized_pl: float
+    unrealized_pl_percent: float
+
+    @property
+    def is_long(self) -> bool:
+        return self.quantity > 0
 
 
 class RiskAction(str, Enum):

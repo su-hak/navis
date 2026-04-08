@@ -5,7 +5,7 @@
 import logging
 from typing import List, Optional
 
-from execution_team.core.order_models import Position
+from .risk_models import Position
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ import pytest
 from datetime import datetime
 from unittest.mock import MagicMock
 
-from execution_team.core.order_models import (
+from risk_team.core.risk_models import (
     OrderSignal, OrderAction, OrderType, AccountInfo, Position
 )
 from risk_team.core.risk_models import RiskAction
