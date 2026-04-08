@@ -56,7 +56,8 @@ uvicorn[standard]>=0.27.0
 coloredlogs>=15.0.1
 
 # Broker APIs (for Execution Team)
-alpaca-trade-api>=3.1.0        # Alpaca Trading API
+alpaca-trade-api>=3.1.0        # Alpaca Trading API (legacy SDK - execution_team)
+alpaca-py>=0.20.2              # Alpaca SDK (new - data_collection/monitoring)
 ib-insync>=0.9.86              # Interactive Brokers API
 
 # Development

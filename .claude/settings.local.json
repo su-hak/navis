@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(pip show:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(git push:*)",
+      "Bash(dos2unix:*)",
+      "Bash(git rm:*)",
+      "Bash(wc:*)",
+      "Bash(ls:*)",
+      "Bash(pip install:*)",
+      "Bash(findstr:*)",
+      "Bash(pip3 list:*)",
+      "Bash(pip3 install:*)",
+      "Bash(/mnt/c/navis/venv/Scripts/pip.exe install:*)",
+      "Bash(sudo apt-get update:*)",
+      "Bash(sudo apt-get install:*)",
+      "Bash(chmod:*)",
+      "Bash(git reset:*)"
+    ]
+  }
+}
