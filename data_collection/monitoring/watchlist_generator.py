@@ -191,14 +191,12 @@ class WatchlistGenerator:
                         logger.debug(f"{symbol}: 거래량 평균 없음")
                         continue
 
-                    # 갭 계산 (daily_bar, previous_daily_bar 모두 없으면 스킵)
-                    if snapshot.daily_bar:
-                        prev_close = snapshot.daily_bar.close
-                    elif snapshot.previous_daily_bar:
+                    # 갭 계산: 전일 종가 기준 (daily_bar.close는 오늘 현재가이므로 사용 금지)
+                    if snapshot.previous_daily_bar:
                         prev_close = snapshot.previous_daily_bar.close
                     else:
                         skipped += 1
-                        logger.debug(f"{symbol}: daily_bar/previous_daily_bar 모두 없음")
+                        logger.debug(f"{symbol}: previous_daily_bar 없음 (전일 종가 불명)")
                         continue
 
                     if snapshot.latest_trade:
@@ -321,12 +319,13 @@ class WatchlistGenerator:
             try:
                 if total_batches > 1 and batch_idx % 10 == 0:
                     logger.info(f"거래량 배치 {batch_idx}/{total_batches}...")
+                # feed 미지정: 스냅샷과 동일한 피드를 사용해 volume 비율 왜곡 방지
+                # (IEX 고정 시 스냅샷 SIP 거래량과 비교되어 ~18배 과장됨)
                 request = StockBarsRequest(
                     symbol_or_symbols=batch,
                     timeframe=TimeFrame(1, TimeFrameUnit.Day),
                     start=start_date,
                     end=end_date,
-                    feed=DataFeed.IEX
                 )
                 bars = await asyncio.get_event_loop().run_in_executor(
                     None, lambda r=request: self.client.get_stock_bars(r)
