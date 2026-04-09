@@ -18,9 +18,11 @@ logger = logging.getLogger(__name__)
 
 class StrategyType(Enum):
     """전략 유형"""
-    MOMENTUM = "momentum"  # 모멘텀 전략
-    BREAKOUT = "breakout"  # 돌파 전략
-    REVERSION = "reversion"  # 리버전 (평균회귀) 전략
+    MOMENTUM = "momentum"       # 모멘텀 전략 (상승장)
+    BREAKOUT = "breakout"       # 돌파 전략 (상승장)
+    REVERSION = "reversion"     # 리버전 (평균회귀) 전략 (상승장)
+    INVERSE_ETF = "inverse_etf"   # 인버스 ETF 전략 (하락장)
+    DEFENSIVE = "defensive"     # 방어형 섹터 전략 (하락장/혼조)
 
 
 @dataclass
@@ -223,6 +225,35 @@ class StrategyManager:
 
         return allocation
 
+    def apply_market_regime(self, regime: str):
+        """
+        시장 국면에 따라 전략 활성화/비활성화
+
+        Args:
+            regime: "BULL" | "BEAR" | "NEUTRAL"
+
+        기획서 분기:
+            BULL   → 롱 전략(MOMENTUM, BREAKOUT, REVERSION) 활성, 하락 전략 비활성
+            BEAR   → 하락 전략(INVERSE_ETF, DEFENSIVE) 활성, 롱 전략 비활성
+            NEUTRAL → DEFENSIVE만 활성, 롱 전략 비활성, 인버스 비활성
+        """
+        long_strategies = {StrategyType.MOMENTUM, StrategyType.BREAKOUT, StrategyType.REVERSION}
+        bear_strategies = {StrategyType.INVERSE_ETF}
+        defensive_strategies = {StrategyType.DEFENSIVE}
+
+        if regime == "BULL":
+            for st in self.strategies:
+                self.strategies[st].enabled = st in long_strategies
+        elif regime == "BEAR":
+            for st in self.strategies:
+                self.strategies[st].enabled = st in (bear_strategies | defensive_strategies)
+        else:  # NEUTRAL
+            for st in self.strategies:
+                self.strategies[st].enabled = st in defensive_strategies
+
+        enabled = [st.value for st, cfg in self.strategies.items() if cfg.enabled]
+        logger.info(f"[MarketRegime={regime}] 활성 전략: {enabled}")
+
     def get_statistics(self) -> Dict:
         """
         멀티 전략 통계
@@ -249,7 +280,7 @@ class StrategyManager:
 # 기획서 예시 설정 함수
 def create_default_strategy_manager(total_capital: float) -> StrategyManager:
     """
-    기획서 기본 설정으로 전략 매니저 생성
+    기획서 기본 설정으로 전략 매니저 생성 (전체 전략 등록)
 
     Args:
         total_capital: 총 자본
@@ -257,37 +288,56 @@ def create_default_strategy_manager(total_capital: float) -> StrategyManager:
     Returns:
         StrategyManager
 
-    기획서 설정:
+    BULL 설정:
     - 전략 A (모멘텀): 40%
     - 전략 B (돌파): 30%
     - 전략 C (리버전): 30%
+
+    BEAR 설정:
+    - 전략 D (인버스 ETF): 20%
+    - 전략 E (방어형 섹터): 30%
+    - 현금: 50%
     """
     manager = StrategyManager(total_capital)
 
-    # 모멘텀 전략 (40%)
+    # ── 상승장 전략 ──────────────────────────────────────────
     manager.add_strategy(StrategyConfig(
         strategy_type=StrategyType.MOMENTUM,
         allocation_percent=40.0,
-        max_positions=3
+        max_positions=3,
+        enabled=True,
     ))
-
-    # 돌파 전략 (30%)
     manager.add_strategy(StrategyConfig(
         strategy_type=StrategyType.BREAKOUT,
         allocation_percent=30.0,
-        max_positions=2
+        max_positions=2,
+        enabled=True,
     ))
-
-    # 리버전 전략 (30%)
     manager.add_strategy(StrategyConfig(
         strategy_type=StrategyType.REVERSION,
         allocation_percent=30.0,
-        max_positions=2
+        max_positions=2,
+        enabled=True,
     ))
 
-    logger.info("기획서 기본 전략 설정 완료:")
-    logger.info(f"  모멘텀: 40% (${total_capital * 0.4:,.2f})")
-    logger.info(f"  돌파: 30% (${total_capital * 0.3:,.2f})")
-    logger.info(f"  리버전: 30% (${total_capital * 0.3:,.2f})")
+    # ── 하락장 전략 ──────────────────────────────────────────
+    # 기획서: 인버스 ETF 최대 포지션 20%, 하루 2회 제한 → max_positions=2
+    manager.add_strategy(StrategyConfig(
+        strategy_type=StrategyType.INVERSE_ETF,
+        allocation_percent=20.0,
+        max_positions=2,
+        enabled=False,  # BEAR 국면 진입 시 활성화
+    ))
+    # 방어형 섹터: 30% (JNJ, PG, XLU)
+    manager.add_strategy(StrategyConfig(
+        strategy_type=StrategyType.DEFENSIVE,
+        allocation_percent=30.0,
+        max_positions=3,
+        enabled=False,  # BEAR/NEUTRAL 국면 진입 시 활성화
+    ))
+
+    logger.info("전체 전략 설정 완료 (BULL + BEAR):")
+    logger.info(f"  [BULL] 모멘텀: 40% | 돌파: 30% | 리버전: 30%")
+    logger.info(f"  [BEAR] 인버스ETF: 20% | 방어섹터: 30% | 현금: 50%")
 
     return manager

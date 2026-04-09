@@ -15,6 +15,7 @@ from utils.logger import logger
 from agents.base_agent import BaseAgent
 from tools.web_search import create_web_search_tool
 from tools.calculator import create_calculator_tool
+from tools.trading_tool import create_trading_tools
 
 
 # Store chat histories for each user
@@ -30,11 +31,32 @@ def is_user_authorized(user_id: int) -> bool:
     return user_id in settings.allowed_user_ids
 
 
+TRADING_SYSTEM_PROMPT = """당신은 Navis 자동매매 시스템의 AI 트레이딩 어시스턴트입니다.
+
+사용 가능한 도구:
+- get_account: 계좌 잔고, 자산, 매수 가능 금액 조회
+- get_positions: 현재 보유 포지션 조회
+- execute_order: 매수/매도 주문 실행 (BUY/SELL)
+- cancel_order: 주문 취소
+- get_execution_stats: 주문 통계 조회
+- web_search: 시장 뉴스 및 종목 정보 검색
+- calculator: 수익률, 투자금 계산
+
+중요 규칙:
+1. execute_order를 호출하기 전에 반드시 사용자에게 주문 내용을 확인받으세요.
+   예: "AAPL 10주 시장가 매수 주문을 실행할까요?"
+2. 매도 시 보유 수량을 먼저 get_positions로 확인하세요.
+3. 숫자는 항상 한국어 형식으로 표시하세요. (예: $1,234.56, +2.5%)
+4. 주문 결과는 성공/실패 여부와 체결가를 명확히 알려주세요.
+5. 확실하지 않은 정보는 web_search로 확인한 후 답변하세요."""
+
+
 def create_agent_tools():
     """Create and return all available tools for the agent."""
     tools = [
         create_web_search_tool(),
         create_calculator_tool(),
+        *create_trading_tools(),
     ]
     return tools
 
@@ -164,7 +186,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # Create agent with tools
         tools = create_agent_tools()
-        agent = BaseAgent(tools=tools, verbose=False)
+        agent = BaseAgent(tools=tools, system_prompt=TRADING_SYSTEM_PROMPT, verbose=False)
 
         # Get response from agent
         response = agent.run(

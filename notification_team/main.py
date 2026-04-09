@@ -114,6 +114,11 @@ class ErrorNotifyRequest(BaseModel):
     error: str
 
 
+class SystemStartRequest(BaseModel):
+    mode: str = "시뮬레이션"
+    watchlist_size: int = 0
+
+
 class PortfolioStatusRequest(BaseModel):
     equity: float
     cash: float
@@ -212,6 +217,16 @@ async def notify_risk_halt(req: RiskHaltRequest) -> Dict[str, Any]:
 async def notify_error(req: ErrorNotifyRequest) -> Dict[str, Any]:
     """오류 알림"""
     await notifier.notify_error(context=req.context, error=req.error)
+    return {"success": True}
+
+
+@app.post("/notify/system-start")
+async def notify_system_start(req: SystemStartRequest) -> Dict[str, Any]:
+    """시스템 시작 알림"""
+    await notifier.notify_system_start(
+        mode=req.mode,
+        watchlist_size=req.watchlist_size,
+    )
     return {"success": True}
 
 

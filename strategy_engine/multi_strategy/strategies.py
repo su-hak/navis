@@ -284,17 +284,202 @@ class ReversionStrategy(BaseStrategy):
             return 50.0
 
 
+class InverseETFStrategy(BaseStrategy):
+    """
+    인버스 ETF 전략 (하락장 수익화)
+
+    기획서 전략 B: 인버스 ETF 전략
+    대상: SQQQ, SPXU
+    조건: BEAR 국면 AND QQQ < SMA20
+    익절: +5% / 손절: -1.5%
+    최대 포지션: 20% / 하루 2회 제한
+    """
+
+    # 인버스 ETF 대상 종목
+    INVERSE_SYMBOLS = ["SQQQ", "SPXU"]
+
+    def __init__(self):
+        super().__init__("Inverse ETF Strategy")
+        self.take_profit_pct = 0.05   # +5% 익절
+        self.stop_loss_pct = -0.015   # -1.5% 손절
+        self.sma_period = 20          # SMA20 기준
+
+    def generate_signal(self, data: pd.DataFrame) -> Optional[Dict]:
+        """
+        인버스 ETF 매수 신호 생성
+
+        조건:
+        1. regime == "BEAR" (외부에서 주입)
+        2. 현재가 < SMA20 (하락 추세 확인)
+        3. RSI < 50 (추가 하락 여력)
+        """
+        try:
+            if data.empty or len(data) < self.sma_period:
+                return None
+
+            latest = data.iloc[-1]
+            symbol = latest.get("symbol", "SQQQ")
+            current_price = float(latest["close"])
+
+            # SMA20
+            sma20 = data["close"].rolling(self.sma_period).mean().iloc[-1]
+
+            # RSI
+            rsi = self._calculate_rsi(data["close"])
+
+            # 매수 조건: 가격 < SMA20 (인버스 ETF는 시장 하락 = ETF 상승 대기)
+            if current_price < sma20 and rsi < 50:
+                distance_pct = ((sma20 - current_price) / sma20) * 100
+                confidence = min(0.90, 0.60 + (distance_pct / 10.0))
+
+                return {
+                    "action": "BUY",
+                    "symbol": symbol,
+                    "confidence": confidence,
+                    "reason": (
+                        f"하락장 인버스 ETF 매수 "
+                        f"(가격 ${current_price:.2f} < SMA20 ${sma20:.2f}, RSI: {rsi:.1f})"
+                    ),
+                    "strategy": "inverse_etf",
+                    "take_profit_pct": self.take_profit_pct,
+                    "stop_loss_pct": self.stop_loss_pct,
+                }
+
+            return {"action": "HOLD"}
+
+        except Exception as e:
+            logger.error(f"인버스 ETF 신호 생성 오류: {e}")
+            return None
+
+    def validate_signal(self, signal: Dict, market_data: Dict) -> bool:
+        """BEAR 국면에서만 유효"""
+        if signal.get("action") != "BUY":
+            return False
+        regime = market_data.get("regime", "NEUTRAL")
+        return regime == "BEAR"
+
+    def _calculate_rsi(self, prices: pd.Series, period: int = 14) -> float:
+        """RSI 계산"""
+        try:
+            delta = prices.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            return float(rsi.iloc[-1])
+        except Exception:
+            return 50.0
+
+
+class DefensiveSectorStrategy(BaseStrategy):
+    """
+    수비형 섹터 로테이션 전략 (하락장 안정성 확보)
+
+    기획서 전략 D: 섹터 로테이션
+    대상: 헬스케어(JNJ), 필수소비재(PG), 유틸리티(XLU)
+    조건: BEAR 또는 NEUTRAL 국면
+    특징: 낮은 변동성, 배당 수익, 하락장 방어
+    """
+
+    # 방어형 종목
+    DEFENSIVE_SYMBOLS = ["JNJ", "PG", "XLU"]
+
+    def __init__(self):
+        super().__init__("Defensive Sector Strategy")
+        self.take_profit_pct = 0.05   # +5% 익절
+        self.stop_loss_pct = -0.03    # -3% 손절 (방어주라 여유 있게)
+        self.rsi_buy_threshold = 45   # RSI < 45일 때 저점 매수
+
+    def generate_signal(self, data: pd.DataFrame) -> Optional[Dict]:
+        """
+        방어형 종목 매수 신호 생성
+
+        조건:
+        1. regime == "BEAR" or "NEUTRAL"
+        2. RSI < 45 (과매도에 가까울 때 저가 매수)
+        3. 볼린저 밴드 하단 근처
+        """
+        try:
+            if data.empty or len(data) < 20:
+                return None
+
+            latest = data.iloc[-1]
+            symbol = latest.get("symbol", "Unknown")
+            current_price = float(latest["close"])
+
+            # RSI 계산
+            rsi = self._calculate_rsi(data["close"])
+
+            # 볼린저 밴드
+            ma20 = data["close"].rolling(20).mean().iloc[-1]
+            std20 = data["close"].rolling(20).std().iloc[-1]
+            lower_band = ma20 - (2 * std20)
+
+            # 매수 조건: RSI 과매도 근처 OR 하단 밴드 근처
+            near_lower_band = current_price <= (lower_band * 1.02)
+            rsi_ok = rsi < self.rsi_buy_threshold
+
+            if rsi_ok or near_lower_band:
+                confidence = 0.70
+                if rsi_ok and near_lower_band:
+                    confidence = 0.85
+
+                return {
+                    "action": "BUY",
+                    "symbol": symbol,
+                    "confidence": confidence,
+                    "reason": (
+                        f"방어형 섹터 매수 "
+                        f"(RSI: {rsi:.1f}, 현재가 ${current_price:.2f})"
+                    ),
+                    "strategy": "defensive_sector",
+                    "take_profit_pct": self.take_profit_pct,
+                    "stop_loss_pct": self.stop_loss_pct,
+                }
+
+            return {"action": "HOLD"}
+
+        except Exception as e:
+            logger.error(f"방어형 섹터 신호 생성 오류: {e}")
+            return None
+
+    def validate_signal(self, signal: Dict, market_data: Dict) -> bool:
+        """BEAR 또는 NEUTRAL 국면에서 유효"""
+        if signal.get("action") != "BUY":
+            return False
+        regime = market_data.get("regime", "NEUTRAL")
+        return regime in ("BEAR", "NEUTRAL")
+
+    def _calculate_rsi(self, prices: pd.Series, period: int = 14) -> float:
+        """RSI 계산"""
+        try:
+            delta = prices.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            return float(rsi.iloc[-1])
+        except Exception:
+            return 50.0
+
+
 # 기획서 참고 (멀티 전략 구조)
 """
 기획서 7. 멀티 전략 시스템:
 
 구조:
-Strategy A (모멘텀)  Strategy B (돌파)  Strategy C (리버전)
-    ↓                    ↓                  ↓
-                동시에 실행
+[Market Regime Detection]
+    → BULL  → Momentum(A) + Breakout(B) + Reversion(C)
+    → BEAR  → InverseETF(D) + DefensiveSector(E)
+    → NEUTRAL → DefensiveSector(E) + 현금 50% 유지
 
-포트폴리오 분배:
-- 전략 A: 40%
-- 전략 B: 30%
-- 전략 C: 30%
+BULL 포트폴리오 분배:
+- 전략 A (모멘텀): 40%
+- 전략 B (돌파): 30%
+- 전략 C (리버전): 30%
+
+BEAR 포트폴리오 분배:
+- 전략 D (인버스 ETF): 20% (SQQQ, SPXU)
+- 전략 E (방어형 섹터): 30% (JNJ, PG, XLU)
+- 현금: 50%
 """

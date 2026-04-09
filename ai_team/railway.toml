@@ -3,11 +3,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-<<<<<<< HEAD
-startCommand = "uvicorn ai_team.api.main:app --host 0.0.0.0 --port $PORT"
-=======
-startCommand = "uvicorn api.main:app --host 0.0.0.0 --port $PORT"
->>>>>>> 5d86c4230b98765d8b230668bae5a6132ebd7a55
+startCommand = "python /app/ai_team/start.py"
 healthcheckPath = "/health"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"

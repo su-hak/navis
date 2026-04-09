@@ -20,7 +20,11 @@ COPY data_collection/ ./data_collection/
 COPY execution_team/ ./execution_team/
 COPY strategy_engine/ ./strategy_engine/
 COPY utils/ ./utils/
+COPY agents/ ./agents/
+COPY tools/ ./tools/
+COPY config/ ./config/
 COPY auto_trading_bot_v2.py .
+COPY telegram_bot.py .
 
 # Set timezone to US Eastern (for market hours)
 ENV TZ=America/New_York

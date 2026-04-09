@@ -9,6 +9,7 @@ import os
 import sys
 import asyncio
 import logging
+import threading
 from datetime import datetime
 from typing import Optional
 from pathlib import Path
@@ -171,6 +172,14 @@ class AutoTradingBotV2:
             # 계좌 정보
             account = self.execution_engine.get_account()
             logger.info(f"✓ 계좌 자산: ${account.equity:,.2f}")
+
+            # 텔레그램 트레이딩 도구에 엔진 등록
+            try:
+                from tools.trading_tool import set_execution_engine
+                set_execution_engine(self.execution_engine)
+                logger.info("✓ 텔레그램 트레이딩 도구 연결 완료")
+            except ImportError:
+                logger.warning("⚠️ trading_tool 모듈 없음 - 텔레그램 매매 기능 비활성화")
 
         except Exception as e:
             logger.error(f"✗ Execution Team 초기화 실패: {e}")
@@ -442,7 +451,16 @@ class AutoTradingBotV2:
             await self.cleanup()
 
     def run(self):
-        """메인 진입점 (동기)"""
+        """메인 진입점 (동기) — 텔레그램 봇을 별도 스레드로 시작 후 매매 루프 실행."""
+        # 텔레그램 봇 백그라운드 스레드 시작
+        telegram_thread = threading.Thread(
+            target=_run_telegram_bot,
+            daemon=True,
+            name="TelegramBot",
+        )
+        telegram_thread.start()
+        logger.info("✓ 텔레그램 봇 스레드 시작")
+
         try:
             asyncio.run(self.run_async())
         except KeyboardInterrupt:
@@ -469,6 +487,20 @@ class AutoTradingBotV2:
             logger.error(f"정리 중 오류: {e}")
 
         logger.info("✓ 자동매매 봇 V2 종료 완료")
+
+
+def _run_telegram_bot():
+    """텔레그램 봇을 별도 스레드에서 실행."""
+    try:
+        from telegram_bot import main as telegram_main
+        logger.info("텔레그램 봇 시작 중...")
+        telegram_main()
+    except ImportError as e:
+        logger.warning(f"⚠️ 텔레그램 봇 모듈 로드 실패 (선택적 기능): {e}")
+    except Exception as e:
+        logger.error(f"텔레그램 봇 오류: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def main():

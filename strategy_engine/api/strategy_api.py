@@ -14,6 +14,8 @@ from ..indicators.technical_indicators import TechnicalIndicators
 from ..filters.stock_filter import StockFilter, FilterCriteria
 from ..scoring.score_calculator import ScoreCalculator, ScoreWeights
 from ..signals.signal_generator import SignalGenerator, TradingConditions, SignalType
+from ..market_regime.market_regime_detector import MarketRegimeDetector
+from ..multi_strategy.strategies import InverseETFStrategy, DefensiveSectorStrategy
 
 
 # ==================== Request Models ====================
@@ -87,6 +89,34 @@ class GenerateSellSignalRequest(BaseModel):
     conditions: Optional[Dict[str, Any]] = Field(None, description="매매 조건")
 
 
+class MarketRegimeRequest(BaseModel):
+    """시장 국면 감지 요청"""
+    spy_data: OHLCVData = Field(..., description="SPY OHLCV 데이터 (최소 50 bars)")
+    qqq_data: OHLCVData = Field(..., description="QQQ OHLCV 데이터 (최소 50 bars)")
+
+
+class MarketRegimeResponse(BaseModel):
+    """시장 국면 감지 응답"""
+    regime: str          # BULL / BEAR / NEUTRAL
+    confidence: float
+    spy_price: float
+    spy_sma50: float
+    qqq_price: float
+    qqq_sma50: float
+    spy_above_sma50: bool
+    qqq_above_sma50: bool
+    spy_distance_pct: float
+    qqq_distance_pct: float
+
+
+class GenerateBearSignalRequest(BaseModel):
+    """하락장 매수 시그널 생성 요청"""
+    symbol: str = Field(..., description="종목 심볼 (SQQQ/SPXU/JNJ/PG/XLU)")
+    data: OHLCVData = Field(..., description="OHLCV 데이터")
+    regime: str = Field("BEAR", description="시장 국면 (BEAR / NEUTRAL)")
+    strategy_type: str = Field("inverse_etf", description="하락장 전략 (inverse_etf / defensive_sector)")
+
+
 # ==================== Response Models ====================
 
 class IndicatorsResponse(BaseModel):
@@ -140,6 +170,9 @@ class StrategyEngineAPI:
         self.stock_filter = StockFilter()
         self.score_calculator = ScoreCalculator()
         self.signal_generator = SignalGenerator()
+        self.regime_detector = MarketRegimeDetector()
+        self.inverse_etf_strategy = InverseETFStrategy()
+        self.defensive_strategy = DefensiveSectorStrategy()
 
     def calculate_indicators(self, symbol: str, df: pd.DataFrame) -> Dict[str, Any]:
         """기술적 지표 계산"""
@@ -196,6 +229,38 @@ class StrategyEngineAPI:
 
         signal = self.signal_generator.generate_sell_signal(symbol, df, entry_price, **kwargs)
         return signal.to_dict() if signal else None
+
+    def detect_market_regime(self, spy_df: pd.DataFrame, qqq_df: pd.DataFrame) -> Optional[Dict[str, Any]]:
+        """시장 국면 감지"""
+        result = self.regime_detector.detect(spy_df, qqq_df)
+        return result.to_dict() if result else None
+
+    def generate_bear_signal(
+        self,
+        symbol: str,
+        df: pd.DataFrame,
+        regime: str,
+        strategy_type: str,
+    ) -> Optional[Dict[str, Any]]:
+        """하락장 매수 시그널 생성"""
+        # symbol 컬럼 추가 (strategies에서 사용)
+        df = df.copy()
+        df["symbol"] = symbol
+
+        market_data = {"regime": regime}
+
+        if strategy_type == "inverse_etf":
+            signal = self.inverse_etf_strategy.generate_signal(df)
+            if signal and signal.get("action") == "BUY":
+                if self.inverse_etf_strategy.validate_signal(signal, market_data):
+                    return signal
+        elif strategy_type == "defensive_sector":
+            signal = self.defensive_strategy.generate_signal(df)
+            if signal and signal.get("action") == "BUY":
+                if self.defensive_strategy.validate_signal(signal, market_data):
+                    return signal
+
+        return None
 
 
 # ==================== FastAPI App ====================
@@ -351,6 +416,54 @@ def create_strategy_api() -> FastAPI:
             if not result:
                 raise HTTPException(status_code=404, detail="매도 시그널이 생성되지 않았습니다 (보유 유지)")
 
+            return result
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.post("/market/regime", response_model=MarketRegimeResponse, tags=["Market Regime"])
+    async def detect_market_regime(request: MarketRegimeRequest):
+        """
+        시장 국면 감지 (BULL / BEAR / NEUTRAL)
+
+        SPY와 QQQ의 SMA50 대비 위치로 시장 국면을 판단합니다.
+        하락장 전략 분기의 핵심 기준입니다.
+        """
+        try:
+            spy_df = request.spy_data.to_dataframe()
+            qqq_df = request.qqq_data.to_dataframe()
+            result = api.detect_market_regime(spy_df, qqq_df)
+            if not result:
+                raise HTTPException(status_code=422, detail="데이터 부족 (최소 50 bars 필요)")
+            return result
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.post("/signal/bear", tags=["Signal"])
+    async def generate_bear_signal(request: GenerateBearSignalRequest):
+        """
+        하락장 매수 시그널 생성
+
+        strategy_type:
+          - inverse_etf   : 인버스 ETF (SQQQ, SPXU) → BEAR 국면 전용
+          - defensive_sector: 방어형 섹터 (JNJ, PG, XLU) → BEAR/NEUTRAL 국면
+        """
+        try:
+            if request.regime not in ("BEAR", "NEUTRAL"):
+                raise HTTPException(status_code=400, detail="regime은 BEAR 또는 NEUTRAL이어야 합니다")
+
+            df = request.data.to_dataframe()
+            result = api.generate_bear_signal(
+                symbol=request.symbol,
+                df=df,
+                regime=request.regime,
+                strategy_type=request.strategy_type,
+            )
+            if not result:
+                raise HTTPException(status_code=404, detail="하락장 매수 조건 미충족 (HOLD)")
             return result
         except HTTPException:
             raise
