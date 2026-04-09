@@ -66,6 +66,19 @@ except ImportError as e:
     traceback.print_exc()
     sys.exit(1)
 
+# AI 뉴스 분석기 (선택적 - 실패해도 봇은 계속 동작)
+try:
+    import sys as _sys
+    import os as _os
+    _ai_team_path = str(Path(__file__).parent)
+    if _ai_team_path not in _sys.path:
+        _sys.path.insert(0, _ai_team_path)
+    from ai_team.news.analyzer import NewsAnalyzer
+    AI_SCORING_AVAILABLE = True
+except Exception as _e:
+    AI_SCORING_AVAILABLE = False
+    logger.warning(f"AI 뉴스 분석기 비활성화 (선택적 기능): {_e}")
+
 
 class AutoTradingBotV2:
     """
@@ -196,9 +209,21 @@ class AutoTradingBotV2:
                 api_secret=self.api_secret,
                 gap_threshold=self.gap_threshold,
                 volume_ratio_threshold=self.volume_ratio_threshold,
-                max_watchlist_size=self.max_watchlist_size
+                max_watchlist_size=self.max_watchlist_size,
+                paper='paper-api' in self.base_url
             )
             logger.info("✓ 워치리스트 생성기 초기화 완료")
+
+            # AI 뉴스 분석기 (선택적)
+            if AI_SCORING_AVAILABLE:
+                try:
+                    self.news_analyzer = NewsAnalyzer()
+                    logger.info("✓ AI 뉴스 분석기 초기화 완료")
+                except Exception as e:
+                    self.news_analyzer = None
+                    logger.warning(f"AI 뉴스 분석기 초기화 실패 (무시): {e}")
+            else:
+                self.news_analyzer = None
 
             # 고주기 모니터 (Stage 2)
             self.high_freq_monitor = HighFrequencyMonitor(
@@ -317,6 +342,52 @@ class AutoTradingBotV2:
         else:
             logger.error(f"✗ 매수 실패: {result.error_message}")
 
+    async def _apply_ai_scoring(self, watchlist: List[Dict]) -> List[Dict]:
+        """
+        AI 뉴스 감성 분석으로 워치리스트 재점수화
+
+        gap/volume 필터를 통과한 후보에 대해서만 실행.
+        감성 점수를 volume_ratio에 최대 ±30% 보정 적용.
+        분석 실패 시 원본 순위 유지.
+        """
+        if not watchlist or not self.news_analyzer:
+            return watchlist
+
+        logger.info(f"AI 뉴스 감성 분석 중 ({len(watchlist)}개 종목)...")
+
+        loop = asyncio.get_event_loop()
+        for stock in watchlist:
+            symbol = stock['symbol']
+            try:
+                sentiment = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        self.news_analyzer.analyze_news_sentiment,
+                        symbol
+                    ),
+                    timeout=10.0
+                )
+                score = sentiment.get('sentiment_score', 0.0)
+                label = sentiment.get('sentiment_label', 'neutral')
+
+                # score 보정: 긍정(+1.0)이면 최대 +30%, 부정(-1.0)이면 최대 -30%
+                stock['ai_sentiment'] = score
+                stock['ai_label'] = label
+                stock['score'] = stock['volume_ratio'] * (1.0 + score * 0.3)
+
+                if score != 0.0:
+                    stock['reason'] += f" | 감성:{label}({score:+.1f})"
+
+            except asyncio.TimeoutError:
+                logger.debug(f"{symbol}: AI 분석 타임아웃 - 원본 점수 유지")
+            except Exception as e:
+                logger.debug(f"{symbol}: AI 분석 오류 - {e}")
+
+        # AI 보정된 score로 재정렬
+        watchlist.sort(key=lambda x: x['score'], reverse=True)
+        logger.info("AI 감성 분석 완료, 워치리스트 재정렬됨")
+        return watchlist
+
     def check_risk_limits(self) -> bool:
         """
         리스크 한계 확인
@@ -397,6 +468,9 @@ class AutoTradingBotV2:
                 watchlist = await self.watchlist_generator.generate_watchlist()
 
                 if watchlist:
+                    # AI 뉴스 감성 스코어링 (선택적)
+                    watchlist = await self._apply_ai_scoring(watchlist)
+
                     logger.info(f"\n워치리스트 갱신:")
                     for i, stock in enumerate(watchlist[:10], 1):
                         logger.info(f"  {i}. {stock['symbol']}: {stock['reason']}")
