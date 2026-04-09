@@ -256,7 +256,8 @@ def main():
     print(f"  Bot is running... Press Ctrl+C to stop")
     print(f"{'='*60}\n")
 
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # stop_signals=None: 서브 스레드에서 실행 시 signal handler 등록 시도 방지
+    application.run_polling(allowed_updates=Update.ALL_TYPES, stop_signals=None)
 
 
 if __name__ == "__main__":

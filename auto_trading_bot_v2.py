@@ -564,7 +564,14 @@ class AutoTradingBotV2:
 
 
 def _run_telegram_bot():
-    """텔레그램 봇을 별도 스레드에서 실행."""
+    """텔레그램 봇을 별도 스레드에서 실행.
+
+    python-telegram-bot v20+는 내부적으로 asyncio를 사용하므로
+    서브 스레드에서는 전용 이벤트 루프를 생성해야 함.
+    """
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     try:
         from telegram_bot import main as telegram_main
         logger.info("텔레그램 봇 시작 중...")
@@ -575,6 +582,8 @@ def _run_telegram_bot():
         logger.error(f"텔레그램 봇 오류: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        loop.close()
 
 
 def main():

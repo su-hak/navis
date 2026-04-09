@@ -191,13 +191,24 @@ class WatchlistGenerator:
                         logger.debug(f"{symbol}: 거래량 평균 없음")
                         continue
 
-                    # 갭 계산
-                    prev_close = (snapshot.daily_bar.close
-                                  if snapshot.daily_bar
-                                  else snapshot.previous_daily_bar.close)
-                    current_price = (snapshot.latest_trade.price
-                                     if snapshot.latest_trade
-                                     else snapshot.latest_quote.ask_price)
+                    # 갭 계산 (daily_bar, previous_daily_bar 모두 없으면 스킵)
+                    if snapshot.daily_bar:
+                        prev_close = snapshot.daily_bar.close
+                    elif snapshot.previous_daily_bar:
+                        prev_close = snapshot.previous_daily_bar.close
+                    else:
+                        skipped += 1
+                        logger.debug(f"{symbol}: daily_bar/previous_daily_bar 모두 없음")
+                        continue
+
+                    if snapshot.latest_trade:
+                        current_price = snapshot.latest_trade.price
+                    elif snapshot.latest_quote and snapshot.latest_quote.ask_price:
+                        current_price = snapshot.latest_quote.ask_price
+                    else:
+                        skipped += 1
+                        logger.debug(f"{symbol}: 현재가 없음")
+                        continue
 
                     gap = ((current_price - prev_close) / prev_close) * 100.0
 
