@@ -135,16 +135,18 @@ class AlpacaBroker(BrokerInterface):
             # Alpaca 주문 상태를 내부 상태로 변환
             status = self._convert_order_status(alpaca_order.status)
 
+            # alpaca_trade_api Entity는 없는 필드 접근 시 AttributeError 발생
+            # → 선택적 타임스탬프 필드는 getattr으로 안전하게 접근
             order_info = {
                 'status': status,
                 'filled_quantity': int(alpaca_order.filled_qty or 0),
                 'filled_price': float(alpaca_order.filled_avg_price or 0),
                 'commission': 0.0,  # Alpaca는 수수료 무료
-                'submitted_at': alpaca_order.submitted_at,
-                'filled_at': alpaca_order.filled_at,
-                'cancelled_at': alpaca_order.cancelled_at,
-                'failed_at': alpaca_order.failed_at,
-                'replaced_at': alpaca_order.replaced_at,
+                'submitted_at': getattr(alpaca_order, 'submitted_at', None),
+                'filled_at': getattr(alpaca_order, 'filled_at', None),
+                'cancelled_at': getattr(alpaca_order, 'cancelled_at', None),
+                'failed_at': getattr(alpaca_order, 'failed_at', None),
+                'replaced_at': getattr(alpaca_order, 'replaced_at', None),
             }
 
             logger.debug(f"주문 조회 성공 - ID: {broker_order_id}, 상태: {status}")
