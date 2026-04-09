@@ -413,9 +413,18 @@ class AutoTradingBotV2:
             return False
 
         # 개별 포지션 손절 체크
+        # unrealized_plpc: Alpaca가 제공하는 수익률 (소수점, 예: -0.02 = -2%)
+        # cost_basis는 일부 환경에서 누락될 수 있으므로 unrealized_plpc 사용
         positions = self.execution_engine.get_positions()
         for position in positions:
-            position_pl_percent = (position.unrealized_pl / position.cost_basis) * 100.0
+            try:
+                position_pl_percent = float(position.unrealized_plpc) * 100.0
+            except (AttributeError, TypeError, ValueError):
+                cost_basis = getattr(position, 'cost_basis', None)
+                if cost_basis and float(cost_basis) != 0:
+                    position_pl_percent = (float(position.unrealized_pl) / float(cost_basis)) * 100.0
+                else:
+                    continue
 
             if position_pl_percent < -self.stop_loss_percent:
                 logger.warning(f"⚠️ {position.symbol} 손절 필요: {position_pl_percent:.2f}%")
