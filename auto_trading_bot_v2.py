@@ -535,6 +535,13 @@ class AutoTradingBotV2:
 
     def run(self):
         """메인 진입점 (동기) — 텔레그램 봇을 별도 스레드로 시작 후 매매 루프 실행."""
+        # 로그 감시 AI 에이전트 시작 (에러 감지 → Claude 분석 → 텔레그램 전송)
+        try:
+            from log_monitor_agent import start_log_monitor_thread
+            start_log_monitor_thread(log_file="logs/auto_trading_v2.log")
+        except Exception as e:
+            logger.warning(f"로그 감시 에이전트 시작 실패 (무시): {e}")
+
         # 텔레그램 봇 백그라운드 스레드 시작
         telegram_thread = threading.Thread(
             target=_run_telegram_bot,
