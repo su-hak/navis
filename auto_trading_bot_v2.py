@@ -11,7 +11,7 @@ import asyncio
 import logging
 import threading
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict
 from pathlib import Path
 from dotenv import load_dotenv
 
