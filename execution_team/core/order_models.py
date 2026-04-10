@@ -56,6 +56,10 @@ class OrderSignal(BaseModel):
     stop_price: Optional[float] = Field(None, gt=0, description="스탑 가격 (STOP인 경우)")
     time_in_force: TimeInForce = Field(default=TimeInForce.DAY, description="주문 유효기간")
 
+    # 장외거래 (Extended Hours: 프리마켓 4AM~9:30AM ET, 애프터마켓 4PM~8PM ET)
+    # 주의: LIMIT 주문 + time_in_force=DAY 필수
+    extended_hours: bool = Field(default=False, description="장외거래 여부")
+
     # 메타데이터
     strategy_id: Optional[str] = Field(None, description="전략 ID")
     reason: Optional[str] = Field(None, description="매매 이유")

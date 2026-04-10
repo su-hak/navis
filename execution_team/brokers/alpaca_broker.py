@@ -102,6 +102,16 @@ class AlpacaBroker(BrokerInterface):
             if order.order_type in [OrderType.STOP, OrderType.STOP_LIMIT] and order.stop_price:
                 order_params['stop_price'] = order.stop_price
 
+            # 장외거래 (Alpaca: LIMIT 주문 + time_in_force=day 필수)
+            extended_hours = getattr(order, 'extended_hours', False)
+            if extended_hours:
+                if order.order_type != OrderType.LIMIT:
+                    raise BrokerError(
+                        "장외거래는 LIMIT 주문만 허용됩니다", retryable=False
+                    )
+                order_params['extended_hours'] = True
+                order_params['time_in_force'] = 'day'  # extended hours 필수 조건
+
             logger.info(f"주문 제출 시도: {order_params}")
 
             # Alpaca API 호출

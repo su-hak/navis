@@ -339,8 +339,47 @@ class AutoTradingBotV2:
             logger.info(f"  체결가: ${result.filled_price:.2f}")
             logger.info(f"  체결 수량: {result.filled_quantity}주")
             self.trade_count += 1
+            self._send_telegram_notify("buy", symbol=symbol,
+                                       filled_price=result.filled_price or signal['current_price'],
+                                       quantity=result.filled_quantity or quantity,
+                                       reason=signal.get('reason'))
         else:
             logger.error(f"✗ 매수 실패: {result.error_message}")
+            self._send_telegram_notify("error", context=f"매수 실패 ({symbol})",
+                                       error=result.error_message or "")
+
+    def _send_telegram_notify(self, ntype: str, **kwargs):
+        """텔레그램 알림 발송 (notification_team HTTP API 호출)"""
+        import threading, requests, os
+        notification_url = os.getenv("NOTIFICATION_URL", "http://localhost:8005")
+
+        def _post():
+            try:
+                if ntype == "buy":
+                    requests.post(f"{notification_url}/notify/buy", json={
+                        "symbol": kwargs.get("symbol"),
+                        "filled_price": kwargs.get("filled_price", 0),
+                        "quantity": kwargs.get("quantity", 0),
+                        "reason": kwargs.get("reason"),
+                    }, timeout=5)
+                elif ntype == "sell":
+                    requests.post(f"{notification_url}/notify/sell", json={
+                        "symbol": kwargs.get("symbol"),
+                        "filled_price": kwargs.get("filled_price", 0),
+                        "quantity": kwargs.get("quantity", 0),
+                        "pnl": kwargs.get("pnl", 0),
+                        "pnl_pct": kwargs.get("pnl_pct", 0),
+                        "sell_type": kwargs.get("sell_type", "SELL"),
+                    }, timeout=5)
+                elif ntype == "error":
+                    requests.post(f"{notification_url}/notify/error", json={
+                        "context": kwargs.get("context", ""),
+                        "error": kwargs.get("error", ""),
+                    }, timeout=5)
+            except Exception as e:
+                logger.warning(f"텔레그램 알림 발송 실패 (무시): {e}")
+
+        threading.Thread(target=_post, daemon=True).start()
 
     async def _apply_ai_scoring(self, watchlist: List[Dict]) -> List[Dict]:
         """
@@ -435,10 +474,13 @@ class AutoTradingBotV2:
 
     def _is_market_hours(self) -> bool:
         """미국 시장 시간인지 확인 (간단 체크)"""
-        from datetime import timezone, timedelta
+        try:
+            from zoneinfo import ZoneInfo
+            et_tz = ZoneInfo("America/New_York")
+        except ImportError:
+            import pytz
+            et_tz = pytz.timezone("America/New_York")
 
-        # 미국 동부시간 (ET)
-        et_tz = timezone(timedelta(hours=-5))  # EST (겨울) / EDT는 -4
         now_et = datetime.now(et_tz)
 
         # 주말 체크
@@ -551,6 +593,15 @@ class AutoTradingBotV2:
         telegram_thread.start()
         logger.info("✓ 텔레그램 봇 스레드 시작")
 
+        # 알림 스케줄러 백그라운드 스레드 시작 (일일/주간 리포트)
+        notification_thread = threading.Thread(
+            target=_run_notification_scheduler,
+            daemon=True,
+            name="NotificationScheduler",
+        )
+        notification_thread.start()
+        logger.info("✓ 알림 스케줄러 스레드 시작")
+
         try:
             asyncio.run(self.run_async())
         except KeyboardInterrupt:
@@ -577,6 +628,24 @@ class AutoTradingBotV2:
             logger.error(f"정리 중 오류: {e}")
 
         logger.info("✓ 자동매매 봇 V2 종료 완료")
+
+
+def _run_notification_scheduler():
+    """알림 스케줄러를 별도 스레드에서 실행 (일일/주간 리포트, 포지션 현황)"""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        from notification_team.scheduler import notification_scheduler
+        notification_scheduler.start()
+        logger.info("✓ 알림 스케줄러 시작 완료 (일일 16:10 ET, 주간 금요일 16:30 ET)")
+        loop.run_forever()
+    except ImportError as e:
+        logger.warning(f"⚠️ 알림 스케줄러 로드 실패 (선택적 기능): {e}")
+    except Exception as e:
+        logger.error(f"알림 스케줄러 오류: {e}")
+    finally:
+        loop.close()
 
 
 def _run_telegram_bot():
