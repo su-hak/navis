@@ -104,12 +104,8 @@ async def job_portfolio_status():
         logger.warning("계좌 정보 없음 (Alpaca API 키 확인 필요) - 포지션 현황 알림 생략")
         return
 
-    try:
-        today_stats = report_builder.db.get_today_stats()
-        daily_pnl = today_stats.get("realized_pnl", 0.0)
-    except Exception as e:
-        logger.warning(f"오늘 통계 조회 실패 (DB 테이블 없음?): {e}")
-        daily_pnl = 0.0
+    # 일중 손익 = 보유 포지션 미실현 손익 합산 (Alpaca 직접 조회)
+    daily_pnl = sum(float(p.get("unrealized_pl", 0)) for p in positions)
 
     await notifier.notify_portfolio_status(
         equity=float(account.get("equity", 0)),
