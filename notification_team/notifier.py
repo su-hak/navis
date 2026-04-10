@@ -174,21 +174,27 @@ class TelegramNotifier:
         pos_count = len(positions)
         pnl_emoji = "📈" if daily_pnl >= 0 else "📉"
 
+        # 총 투자금(포지션 시장가 합산) 대비 손익 %
+        total_market_value = sum(float(p.get("market_value", 0)) for p in positions)
+        invested = total_market_value - daily_pnl  # 원가 추정
+        daily_pnl_pct = (daily_pnl / invested * 100) if invested != 0 else 0.0
+
         lines = [
             "📋 *포지션 현황*",
             f"총 자산: ${equity:,.2f}",
             f"현금: ${cash:,.2f}",
             f"보유 종목: {pos_count}개",
-            f"일중 손익: {pnl_emoji} ${daily_pnl:+,.2f}",
+            f"일중 손익: {pnl_emoji} ${daily_pnl:+,.2f} ({daily_pnl_pct:+.2f}%)",
         ]
 
         if positions:
             lines.append("")
             for pos in positions[:5]:
                 symbol = pos.get("symbol", "?")
-                unreal = pos.get("unrealized_pl", 0)
-                unreal_emoji = "📈" if float(unreal) >= 0 else "📉"
-                lines.append(f"  `{symbol}` {unreal_emoji} ${float(unreal):+,.2f}")
+                unreal = float(pos.get("unrealized_pl", 0))
+                unreal_pct = float(pos.get("unrealized_plpc", 0)) * 100.0
+                unreal_emoji = "📈" if unreal >= 0 else "📉"
+                lines.append(f"  `{symbol}` {unreal_emoji} ${unreal:+,.2f} ({unreal_pct:+.2f}%)")
             if pos_count > 5:
                 lines.append(f"  ... 외 {pos_count - 5}개")
 

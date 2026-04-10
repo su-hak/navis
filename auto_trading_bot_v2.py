@@ -556,6 +556,38 @@ class AutoTradingBotV2:
 
         return market_open <= now_et <= market_close
 
+    async def _stop_loss_monitor(self):
+        """
+        손절 전용 독립 루프 (30초마다 실행)
+
+        워치리스트와 무관하게 모든 보유 포지션을 체크.
+        손절 기준(-STOP_LOSS_PERCENT) 초과 시 즉시 매도.
+        """
+        INTERVAL = 30  # 초
+        while self.is_running:
+            await asyncio.sleep(INTERVAL)
+            if not self.auto_trading_enabled:
+                continue
+            try:
+                positions = self.execution_engine.get_positions()
+                for position in positions:
+                    try:
+                        position_pl_percent = float(position.unrealized_plpc) * 100.0
+                    except (AttributeError, TypeError, ValueError):
+                        cost_basis = getattr(position, 'cost_basis', None)
+                        if cost_basis and float(cost_basis) != 0:
+                            position_pl_percent = (float(position.unrealized_pl) / float(cost_basis)) * 100.0
+                        else:
+                            continue
+
+                    if position_pl_percent < -self.stop_loss_percent:
+                        logger.warning(
+                            f"[손절 모니터] {position.symbol}: {position_pl_percent:.2f}% → 손절 실행"
+                        )
+                        self._execute_stop_loss(position)
+            except Exception as e:
+                logger.error(f"손절 모니터 오류: {e}")
+
     async def _stage1_market_scan(self):
         """
         Stage 1: 전체 시장 스캔 및 워치리스트 생성
@@ -626,8 +658,11 @@ class AutoTradingBotV2:
         self.is_running = True
 
         try:
-            # Stage 1 태스크 시작 (Stage 2는 Stage 1에서 자동으로 시작)
-            await self._stage1_market_scan()
+            # Stage 1 + 손절 모니터 병렬 실행
+            await asyncio.gather(
+                self._stage1_market_scan(),
+                self._stop_loss_monitor(),
+            )
 
         except asyncio.CancelledError:
             logger.info("\n태스크 취소됨")

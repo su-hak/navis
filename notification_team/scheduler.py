@@ -66,6 +66,7 @@ async def _get_positions_from_alpaca() -> list:
                 {
                     "symbol": p.get("symbol"),
                     "unrealized_pl": p.get("unrealized_pl", 0),
+                    "unrealized_plpc": p.get("unrealized_plpc", 0),
                     "qty": p.get("qty", 0),
                     "market_value": p.get("market_value", 0),
                 }
