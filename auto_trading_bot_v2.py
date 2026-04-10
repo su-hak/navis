@@ -557,13 +557,37 @@ class AutoTradingBotV2:
 
         return market_open <= now_et <= market_close
 
+    def _is_extended_hours(self) -> bool:
+        """
+        장외거래 가능 시간 여부 (프리마켓 4AM~9:30AM ET, 애프터마켓 4PM~8PM ET)
+        장중 시간은 False 반환 (market order 사용)
+        """
+        try:
+            from zoneinfo import ZoneInfo
+            et_tz = ZoneInfo("America/New_York")
+        except ImportError:
+            import pytz
+            et_tz = pytz.timezone("America/New_York")
+
+        from datetime import time as dtime
+        now_et = datetime.now(et_tz)
+
+        if now_et.weekday() >= 5:
+            return False
+
+        t = now_et.time()
+        premarket  = dtime(4, 0) <= t < dtime(9, 30)
+        afterhours = dtime(16, 0) <= t < dtime(20, 0)
+        return premarket or afterhours
+
     async def _stop_loss_monitor(self):
         """
-        손절 전용 독립 루프 (30초마다 실행)
+        손절/익절 전용 독립 루프 (30초마다 실행)
 
         워치리스트와 무관하게 모든 보유 포지션을 체크.
-        손절 기준(-STOP_LOSS_PERCENT) 초과 시 즉시 Alpaca API로 매도.
-        execution_engine을 우회해 blocking 문제 제거.
+        - 장중: market order
+        - 장외(프리마켓/애프터마켓): limit order + extended_hours=True
+        - 거래 불가 시간(새벽 등): 스킵
         """
         INTERVAL = 30  # 초
         while self.is_running:
@@ -575,9 +599,14 @@ class AutoTradingBotV2:
             if not self.auto_trading_enabled:
                 continue
 
+            is_market = self._is_market_hours()
+            is_extended = self._is_extended_hours()
+
+            if not is_market and not is_extended:
+                continue  # 거래 불가 시간 (새벽 등) 스킵
+
             try:
                 loop = asyncio.get_event_loop()
-                # blocking 브로커 호출을 executor에서 실행
                 positions = await loop.run_in_executor(
                     None, self.broker.api.list_positions
                 )
@@ -606,24 +635,45 @@ class AutoTradingBotV2:
                         continue
 
                     try:
-                        order = await loop.run_in_executor(
-                            None,
-                            lambda s=symbol, q=qty: self.broker.api.submit_order(
-                                symbol=s,
-                                qty=q,
-                                side='sell',
-                                type='market',
-                                time_in_force='day'
+                        current_price = float(getattr(position, 'current_price', 0) or 0)
+
+                        if is_market:
+                            # 장중: 시장가 주문
+                            order = await loop.run_in_executor(
+                                None,
+                                lambda s=symbol, q=qty: self.broker.api.submit_order(
+                                    symbol=s,
+                                    qty=q,
+                                    side='sell',
+                                    type='market',
+                                    time_in_force='day'
+                                )
                             )
-                        )
+                        else:
+                            # 장외: 지정가 주문 (현재가 기준, 0.5% 슬리피지 허용)
+                            limit_price = round(current_price * 0.995, 2)
+                            order = await loop.run_in_executor(
+                                None,
+                                lambda s=symbol, q=qty, lp=limit_price: self.broker.api.submit_order(
+                                    symbol=s,
+                                    qty=q,
+                                    side='sell',
+                                    type='limit',
+                                    time_in_force='day',
+                                    limit_price=lp,
+                                    extended_hours=True
+                                )
+                            )
+
+                        session = "장중" if is_market else "장외"
                         logger.warning(
-                            f"[{sell_type}] {symbol} 주문 완료 "
+                            f"[{sell_type}] {symbol} {session} 주문 완료 "
                             f"(Alpaca ID: {order.id})"
                         )
                         self._send_telegram_notify(
                             "sell",
                             symbol=symbol,
-                            filled_price=float(getattr(position, 'current_price', 0) or 0),
+                            filled_price=current_price,
                             quantity=qty,
                             pnl=float(position.unrealized_pl),
                             pnl_pct=pl_pct,
@@ -635,7 +685,7 @@ class AutoTradingBotV2:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"손절 모니터 오류: {e}")
+                logger.error(f"손절/익절 모니터 오류: {e}")
 
     async def _stage1_market_scan(self):
         """
