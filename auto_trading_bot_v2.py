@@ -561,30 +561,67 @@ class AutoTradingBotV2:
         손절 전용 독립 루프 (30초마다 실행)
 
         워치리스트와 무관하게 모든 보유 포지션을 체크.
-        손절 기준(-STOP_LOSS_PERCENT) 초과 시 즉시 매도.
+        손절 기준(-STOP_LOSS_PERCENT) 초과 시 즉시 Alpaca API로 매도.
+        execution_engine을 우회해 blocking 문제 제거.
         """
         INTERVAL = 30  # 초
         while self.is_running:
-            await asyncio.sleep(INTERVAL)
+            try:
+                await asyncio.sleep(INTERVAL)
+            except asyncio.CancelledError:
+                break
+
             if not self.auto_trading_enabled:
                 continue
+
             try:
-                positions = self.execution_engine.get_positions()
+                loop = asyncio.get_event_loop()
+                # blocking 브로커 호출을 executor에서 실행
+                positions = await loop.run_in_executor(
+                    None, self.broker.api.list_positions
+                )
                 for position in positions:
                     try:
-                        position_pl_percent = float(position.unrealized_plpc) * 100.0
+                        pl_pct = float(position.unrealized_plpc) * 100.0
                     except (AttributeError, TypeError, ValueError):
-                        cost_basis = getattr(position, 'cost_basis', None)
-                        if cost_basis and float(cost_basis) != 0:
-                            position_pl_percent = (float(position.unrealized_pl) / float(cost_basis)) * 100.0
-                        else:
-                            continue
+                        continue
 
-                    if position_pl_percent < -self.stop_loss_percent:
+                    if pl_pct < -self.stop_loss_percent:
+                        symbol = position.symbol
+                        qty = int(float(position.qty))
                         logger.warning(
-                            f"[손절 모니터] {position.symbol}: {position_pl_percent:.2f}% → 손절 실행"
+                            f"[손절 모니터] {symbol}: {pl_pct:.2f}% "
+                            f"(기준: -{self.stop_loss_percent}%) → 손절 주문 제출"
                         )
-                        self._execute_stop_loss(position)
+                        try:
+                            order = await loop.run_in_executor(
+                                None,
+                                lambda s=symbol, q=qty: self.broker.api.submit_order(
+                                    symbol=s,
+                                    qty=q,
+                                    side='sell',
+                                    type='market',
+                                    time_in_force='day'
+                                )
+                            )
+                            logger.warning(
+                                f"[손절 모니터] {symbol} 손절 주문 완료 "
+                                f"(Alpaca ID: {order.id})"
+                            )
+                            self._send_telegram_notify(
+                                "sell",
+                                symbol=symbol,
+                                filled_price=float(getattr(position, 'current_price', 0) or 0),
+                                quantity=qty,
+                                pnl=float(position.unrealized_pl),
+                                pnl_pct=pl_pct,
+                                sell_type="STOP_LOSS"
+                            )
+                        except Exception as e:
+                            logger.error(f"[손절 모니터] {symbol} 손절 주문 실패: {e}")
+
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 logger.error(f"손절 모니터 오류: {e}")
 
@@ -657,12 +694,13 @@ class AutoTradingBotV2:
 
         self.is_running = True
 
+        # 손절 모니터를 독립 태스크로 실행 (Stage 1 오류와 무관하게 유지)
+        stop_loss_task = asyncio.create_task(
+            self._stop_loss_monitor(), name="stop_loss_monitor"
+        )
+
         try:
-            # Stage 1 + 손절 모니터 병렬 실행
-            await asyncio.gather(
-                self._stage1_market_scan(),
-                self._stop_loss_monitor(),
-            )
+            await self._stage1_market_scan()
 
         except asyncio.CancelledError:
             logger.info("\n태스크 취소됨")
@@ -671,6 +709,7 @@ class AutoTradingBotV2:
             import traceback
             traceback.print_exc()
         finally:
+            stop_loss_task.cancel()
             await self.cleanup()
 
     def run(self):
