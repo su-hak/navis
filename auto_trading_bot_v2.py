@@ -117,6 +117,7 @@ class AutoTradingBotV2:
         # 리스크 관리 (기획서: 1회 10%, 손절 -2%, 일일 -5%)
         self.max_investment_percent = float(os.getenv('MAX_INVESTMENT_PERCENT', '10.0'))
         self.stop_loss_percent = float(os.getenv('STOP_LOSS_PERCENT', '2.0'))
+        self.take_profit_percent = float(os.getenv('TAKE_PROFIT_PERCENT', '5.0'))
         self.max_daily_loss_percent = float(os.getenv('MAX_DAILY_LOSS_PERCENT', '5.0'))
         self.max_positions = int(os.getenv('MAX_POSITIONS', '5'))
 
@@ -139,7 +140,7 @@ class AutoTradingBotV2:
         logger.info(f"[Stage 1] 종목 필터: 최소 주가=${self.min_price}, 최소 평균 거래량={self.min_avg_volume:,}")
         logger.info(f"[Stage 2] 모니터링 주기: {self.monitor_interval}초")
         logger.info(f"[Stage 2] 변동 임계값: {self.price_change_threshold}%")
-        logger.info(f"[리스크] 1회 투자: {self.max_investment_percent}%, 손절: -{self.stop_loss_percent}%, 일일 손실: -{self.max_daily_loss_percent}%")
+        logger.info(f"[리스크] 1회 투자: {self.max_investment_percent}%, 손절: -{self.stop_loss_percent}%, 익절: +{self.take_profit_percent}%, 일일 손실: -{self.max_daily_loss_percent}%")
 
         if not self.api_key or not self.api_secret:
             raise ValueError("ALPACA_API_KEY와 ALPACA_SECRET_KEY를 설정하세요")
@@ -586,39 +587,50 @@ class AutoTradingBotV2:
                     except (AttributeError, TypeError, ValueError):
                         continue
 
+                    symbol = position.symbol
+                    qty = int(float(position.qty))
+
                     if pl_pct < -self.stop_loss_percent:
-                        symbol = position.symbol
-                        qty = int(float(position.qty))
+                        sell_type = "STOP_LOSS"
                         logger.warning(
-                            f"[손절 모니터] {symbol}: {pl_pct:.2f}% "
-                            f"(기준: -{self.stop_loss_percent}%) → 손절 주문 제출"
+                            f"[손절] {symbol}: {pl_pct:.2f}% "
+                            f"(기준: -{self.stop_loss_percent}%) → 매도 주문 제출"
                         )
-                        try:
-                            order = await loop.run_in_executor(
-                                None,
-                                lambda s=symbol, q=qty: self.broker.api.submit_order(
-                                    symbol=s,
-                                    qty=q,
-                                    side='sell',
-                                    type='market',
-                                    time_in_force='day'
-                                )
+                    elif pl_pct > self.take_profit_percent:
+                        sell_type = "TAKE_PROFIT"
+                        logger.warning(
+                            f"[익절] {symbol}: {pl_pct:.2f}% "
+                            f"(기준: +{self.take_profit_percent}%) → 매도 주문 제출"
+                        )
+                    else:
+                        continue
+
+                    try:
+                        order = await loop.run_in_executor(
+                            None,
+                            lambda s=symbol, q=qty: self.broker.api.submit_order(
+                                symbol=s,
+                                qty=q,
+                                side='sell',
+                                type='market',
+                                time_in_force='day'
                             )
-                            logger.warning(
-                                f"[손절 모니터] {symbol} 손절 주문 완료 "
-                                f"(Alpaca ID: {order.id})"
-                            )
-                            self._send_telegram_notify(
-                                "sell",
-                                symbol=symbol,
-                                filled_price=float(getattr(position, 'current_price', 0) or 0),
-                                quantity=qty,
-                                pnl=float(position.unrealized_pl),
-                                pnl_pct=pl_pct,
-                                sell_type="STOP_LOSS"
-                            )
-                        except Exception as e:
-                            logger.error(f"[손절 모니터] {symbol} 손절 주문 실패: {e}")
+                        )
+                        logger.warning(
+                            f"[{sell_type}] {symbol} 주문 완료 "
+                            f"(Alpaca ID: {order.id})"
+                        )
+                        self._send_telegram_notify(
+                            "sell",
+                            symbol=symbol,
+                            filled_price=float(getattr(position, 'current_price', 0) or 0),
+                            quantity=qty,
+                            pnl=float(position.unrealized_pl),
+                            pnl_pct=pl_pct,
+                            sell_type=sell_type
+                        )
+                    except Exception as e:
+                        logger.error(f"[{sell_type}] {symbol} 주문 실패: {e}")
 
             except asyncio.CancelledError:
                 break
