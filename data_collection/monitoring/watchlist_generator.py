@@ -46,6 +46,8 @@ class WatchlistGenerator:
         gap_threshold: float = 1.5,           # 완화된 기본값 (기존 3.0)
         volume_ratio_threshold: float = 1.5,   # 완화된 기본값 (기존 3.0)
         max_watchlist_size: int = 20,
+        min_price: float = 5.0,               # 최소 주가 ($5 이하 개잡주 제외)
+        min_avg_volume: int = 500000,          # 최소 평균 거래량 (유동성 확보)
         paper: bool = True
     ):
         self.client = StockHistoricalDataClient(api_key, api_secret)
@@ -53,6 +55,8 @@ class WatchlistGenerator:
         self.gap_threshold = gap_threshold
         self.volume_ratio_threshold = volume_ratio_threshold
         self.max_watchlist_size = max_watchlist_size
+        self.min_price = min_price
+        self.min_avg_volume = min_avg_volume
 
         # 유니버스 캐시 (일 1회 갱신)
         self._universe_cache: List[str] = []
@@ -206,6 +210,18 @@ class WatchlistGenerator:
                     else:
                         skipped += 1
                         logger.debug(f"{symbol}: 현재가 없음")
+                        continue
+
+                    # 최소 주가 필터 ($5 미만 개잡주/penny stock 제외)
+                    if current_price < self.min_price:
+                        skipped += 1
+                        logger.debug(f"{symbol}: 주가 너무 낮음 (${current_price:.2f} < ${self.min_price})")
+                        continue
+
+                    # 최소 평균 거래량 필터 (유동성 확보)
+                    if vol_avg < self.min_avg_volume:
+                        skipped += 1
+                        logger.debug(f"{symbol}: 평균 거래량 부족 ({vol_avg:,.0f} < {self.min_avg_volume:,})")
                         continue
 
                     gap = ((current_price - prev_close) / prev_close) * 100.0

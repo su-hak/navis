@@ -107,6 +107,8 @@ class AutoTradingBotV2:
         self.gap_threshold = float(os.getenv('GAP_THRESHOLD', '3.0'))  # 3%
         self.volume_ratio_threshold = float(os.getenv('VOLUME_RATIO_THRESHOLD', '3.0'))  # 3배
         self.max_watchlist_size = int(os.getenv('MAX_WATCHLIST_SIZE', '20'))
+        self.min_price = float(os.getenv('MIN_STOCK_PRICE', '5.0'))          # 최소 주가 ($5)
+        self.min_avg_volume = int(os.getenv('MIN_AVG_VOLUME', '500000'))       # 최소 평균 거래량
 
         # Stage 2 설정 (고주기 감시)
         self.monitor_interval = int(os.getenv('MONITOR_INTERVAL_SECONDS', '10'))  # 5~10초
@@ -134,6 +136,7 @@ class AutoTradingBotV2:
 
         logger.info(f"[Stage 1] 시장 스캔 주기: {self.market_scan_interval}분")
         logger.info(f"[Stage 1] 워치리스트 조건: 갭>{self.gap_threshold}% or 거래량>{self.volume_ratio_threshold}배")
+        logger.info(f"[Stage 1] 종목 필터: 최소 주가=${self.min_price}, 최소 평균 거래량={self.min_avg_volume:,}")
         logger.info(f"[Stage 2] 모니터링 주기: {self.monitor_interval}초")
         logger.info(f"[Stage 2] 변동 임계값: {self.price_change_threshold}%")
         logger.info(f"[리스크] 1회 투자: {self.max_investment_percent}%, 손절: -{self.stop_loss_percent}%, 일일 손실: -{self.max_daily_loss_percent}%")
@@ -210,6 +213,8 @@ class AutoTradingBotV2:
                 gap_threshold=self.gap_threshold,
                 volume_ratio_threshold=self.volume_ratio_threshold,
                 max_watchlist_size=self.max_watchlist_size,
+                min_price=self.min_price,
+                min_avg_volume=self.min_avg_volume,
                 paper='paper-api' in self.base_url
             )
             logger.info("✓ 워치리스트 생성기 초기화 완료")
@@ -383,18 +388,22 @@ class AutoTradingBotV2:
 
     async def _apply_ai_scoring(self, watchlist: List[Dict]) -> List[Dict]:
         """
-        AI 뉴스 감성 분석으로 워치리스트 재점수화
+        AI 뉴스 감성 분석으로 워치리스트 필터링 및 재점수화
 
         gap/volume 필터를 통과한 후보에 대해서만 실행.
-        감성 점수를 volume_ratio에 최대 ±30% 보정 적용.
-        분석 실패 시 원본 순위 유지.
+        - 부정 감성 점수 < -0.3이면 해당 종목 제거 (hard gate)
+        - 나머지 종목은 감성 점수로 최대 ±30% 보정 및 재정렬
+        - 분석 실패 시 원본 순위 유지 (safe fallback)
         """
         if not watchlist or not self.news_analyzer:
             return watchlist
 
         logger.info(f"AI 뉴스 감성 분석 중 ({len(watchlist)}개 종목)...")
 
+        AI_BLOCK_THRESHOLD = -0.3  # 이 점수 미만이면 매수 차단
+
         loop = asyncio.get_event_loop()
+        approved = []
         for stock in watchlist:
             symbol = stock['symbol']
             try:
@@ -409,23 +418,37 @@ class AutoTradingBotV2:
                 score = sentiment.get('sentiment_score', 0.0)
                 label = sentiment.get('sentiment_label', 'neutral')
 
-                # score 보정: 긍정(+1.0)이면 최대 +30%, 부정(-1.0)이면 최대 -30%
                 stock['ai_sentiment'] = score
                 stock['ai_label'] = label
-                stock['score'] = stock['volume_ratio'] * (1.0 + score * 0.3)
 
-                if score != 0.0:
-                    stock['reason'] += f" | 감성:{label}({score:+.1f})"
+                # hard gate: 부정 감성이 임계값 미만이면 워치리스트에서 제거
+                if score < AI_BLOCK_THRESHOLD:
+                    logger.warning(
+                        f"[AI 차단] {symbol}: 감성 점수 {score:+.2f} < {AI_BLOCK_THRESHOLD} "
+                        f"({label}) → 워치리스트 제외"
+                    )
+                    continue
+
+                # score 보정: 긍정(+1.0)이면 최대 +30%, 부정(-1.0)이면 최대 -30%
+                stock['score'] = stock['volume_ratio'] * (1.0 + score * 0.3)
+                stock['reason'] += f" | 감성:{label}({score:+.1f})"
+                approved.append(stock)
 
             except asyncio.TimeoutError:
-                logger.debug(f"{symbol}: AI 분석 타임아웃 - 원본 점수 유지")
+                logger.debug(f"{symbol}: AI 분석 타임아웃 - 원본 점수 유지 (통과)")
+                approved.append(stock)
             except Exception as e:
-                logger.debug(f"{symbol}: AI 분석 오류 - {e}")
+                logger.debug(f"{symbol}: AI 분석 오류 - {e} (원본 점수 유지, 통과)")
+                approved.append(stock)
+
+        removed = len(watchlist) - len(approved)
+        if removed:
+            logger.info(f"AI 감성 필터: {removed}개 종목 제거됨")
 
         # AI 보정된 score로 재정렬
-        watchlist.sort(key=lambda x: x['score'], reverse=True)
-        logger.info("AI 감성 분석 완료, 워치리스트 재정렬됨")
-        return watchlist
+        approved.sort(key=lambda x: x['score'], reverse=True)
+        logger.info(f"AI 감성 분석 완료: {len(approved)}개 종목 통과, 워치리스트 재정렬됨")
+        return approved
 
     def check_risk_limits(self) -> bool:
         """
@@ -466,11 +489,51 @@ class AutoTradingBotV2:
                     continue
 
             if position_pl_percent < -self.stop_loss_percent:
-                logger.warning(f"⚠️ {position.symbol} 손절 필요: {position_pl_percent:.2f}%")
-                # 자동 손절 실행 (옵션)
-                # self._execute_stop_loss(position)
+                logger.warning(f"⚠️ {position.symbol} 손절 실행: {position_pl_percent:.2f}%")
+                if self.auto_trading_enabled:
+                    self._execute_stop_loss(position)
+                else:
+                    logger.warning(f"  (시뮬레이션 모드 - 실제 손절 미실행)")
 
         return True
+
+    def _execute_stop_loss(self, position):
+        """
+        손절 주문 실행
+
+        Args:
+            position: Alpaca position 객체
+        """
+        symbol = position.symbol
+        try:
+            qty = int(float(position.qty))
+            if qty <= 0:
+                return
+
+            order_signal = OrderSignal(
+                symbol=symbol,
+                action=OrderAction.SELL,
+                order_type=OrderType.MARKET,
+                quantity=qty,
+                strategy_id="stop_loss",
+                reason=f"손절: {float(position.unrealized_plpc) * 100:.2f}%"
+            )
+            result = self.execution_engine.execute_order(order_signal)
+            if result.success:
+                logger.warning(f"✓ {symbol} 손절 완료: {qty}주 @ ${result.filled_price:.2f}")
+                self._send_telegram_notify(
+                    "sell",
+                    symbol=symbol,
+                    filled_price=result.filled_price or 0,
+                    quantity=qty,
+                    pnl=float(position.unrealized_pl),
+                    pnl_pct=float(position.unrealized_plpc) * 100,
+                    sell_type="STOP_LOSS"
+                )
+            else:
+                logger.error(f"✗ {symbol} 손절 실패: {result.error_message}")
+        except Exception as e:
+            logger.error(f"{symbol} 손절 처리 중 오류: {e}")
 
     def _is_market_hours(self) -> bool:
         """미국 시장 시간인지 확인 (간단 체크)"""
