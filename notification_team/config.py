@@ -39,7 +39,12 @@ class NotificationConfig:
         MYSQL_DATABASE: str = os.getenv("MYSQL_DATABASE", "trading_db")
 
     # ── 백엔드 URL (daily report 트리거용) ────────────────────
-    BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:8000")
+    BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
+
+    # ── Alpaca API (포지션/계좌 직접 조회용) ──────────────────
+    ALPACA_API_KEY: str = os.getenv("ALPACA_API_KEY", "")
+    ALPACA_SECRET_KEY: str = os.getenv("ALPACA_SECRET_KEY", "")
+    ALPACA_BASE_URL: str = os.getenv("ALPACA_BASE_URL", "https://paper-api.alpaca.markets")
 
     # ── 알림 스케줄 ───────────────────────────────────────────
     # 장중 포지션 현황 알림 주기 (분, 0이면 비활성)

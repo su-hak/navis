@@ -18,36 +18,68 @@ from .report_builder import report_builder
 logger = logging.getLogger(__name__)
 
 
-async def _get_account_from_backend() -> dict:
-    """백엔드 API에서 계좌 정보 조회"""
+def _alpaca_headers() -> dict:
+    return {
+        "APCA-API-KEY-ID": config.ALPACA_API_KEY,
+        "APCA-API-SECRET-KEY": config.ALPACA_SECRET_KEY,
+    }
+
+
+async def _get_account_from_alpaca() -> dict:
+    """Alpaca API 직접 호출로 계좌 정보 조회"""
+    if not config.ALPACA_API_KEY or not config.ALPACA_SECRET_KEY:
+        logger.warning("Alpaca API 키 미설정 - 계좌 조회 불가")
+        return {}
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
-            resp = await client.get(f"{config.BACKEND_URL}/dashboard/portfolio")
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+            resp = await client.get(
+                f"{config.ALPACA_BASE_URL}/v2/account",
+                headers=_alpaca_headers(),
+            )
             resp.raise_for_status()
             data = resp.json()
-            return data.get("account") or {}
+            return {
+                "equity": data.get("equity", 0),
+                "cash": data.get("cash", 0),
+                "buying_power": data.get("buying_power", 0),
+                "portfolio_value": data.get("portfolio_value", 0),
+            }
     except Exception as e:
-        logger.warning(f"백엔드 계좌 조회 실패: {e}")
+        logger.warning(f"Alpaca 계좌 조회 실패: {e}")
         return {}
 
 
-async def _get_positions_from_backend() -> list:
-    """백엔드 API에서 포지션 조회"""
+async def _get_positions_from_alpaca() -> list:
+    """Alpaca API 직접 호출로 포지션 조회"""
+    if not config.ALPACA_API_KEY or not config.ALPACA_SECRET_KEY:
+        logger.warning("Alpaca API 키 미설정 - 포지션 조회 불가")
+        return []
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
-            resp = await client.get(f"{config.BACKEND_URL}/dashboard/portfolio")
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+            resp = await client.get(
+                f"{config.ALPACA_BASE_URL}/v2/positions",
+                headers=_alpaca_headers(),
+            )
             resp.raise_for_status()
-            data = resp.json()
-            return data.get("positions") or []
+            positions = resp.json()
+            return [
+                {
+                    "symbol": p.get("symbol"),
+                    "unrealized_pl": p.get("unrealized_pl", 0),
+                    "qty": p.get("qty", 0),
+                    "market_value": p.get("market_value", 0),
+                }
+                for p in positions
+            ]
     except Exception as e:
-        logger.warning(f"백엔드 포지션 조회 실패: {e}")
+        logger.warning(f"Alpaca 포지션 조회 실패: {e}")
         return []
 
 
 async def job_daily_report():
     """일일 리포트 발송 (16:10 ET)"""
     logger.info("[스케줄] 일일 리포트 생성 중...")
-    account = await _get_account_from_backend()
+    account = await _get_account_from_alpaca()
     ending_equity = float(account.get("equity", 0))
     report = report_builder.build_daily_report(ending_equity=ending_equity)
     await notifier.notify_daily_report(report)
@@ -65,19 +97,25 @@ async def job_weekly_report():
 async def job_portfolio_status():
     """장중 포지션 현황 알림 (설정된 간격마다)"""
     logger.info("[스케줄] 포지션 현황 알림 발송 중...")
-    account = await _get_account_from_backend()
-    positions = await _get_positions_from_backend()
+    account = await _get_account_from_alpaca()
+    positions = await _get_positions_from_alpaca()
 
     if not account:
-        logger.warning("계좌 정보 없음 - 포지션 현황 알림 생략")
+        logger.warning("계좌 정보 없음 (Alpaca API 키 확인 필요) - 포지션 현황 알림 생략")
         return
 
-    today_stats = report_builder.db.get_today_stats()
+    try:
+        today_stats = report_builder.db.get_today_stats()
+        daily_pnl = today_stats.get("realized_pnl", 0.0)
+    except Exception as e:
+        logger.warning(f"오늘 통계 조회 실패 (DB 테이블 없음?): {e}")
+        daily_pnl = 0.0
+
     await notifier.notify_portfolio_status(
         equity=float(account.get("equity", 0)),
         cash=float(account.get("cash", 0)),
         positions=positions,
-        daily_pnl=today_stats.get("realized_pnl", 0.0),
+        daily_pnl=daily_pnl,
     )
     logger.info("✓ 포지션 현황 알림 발송 완료")
 

@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from .config import config
 from .notifier import notifier
 from .report_builder import report_builder, report_db
-from .scheduler import notification_scheduler
+from .scheduler import notification_scheduler, job_portfolio_status
 
 # ── 로깅 설정 ─────────────────────────────────────────────────
 logging.basicConfig(
@@ -51,10 +51,10 @@ async def lifespan(app: FastAPI):
     notification_scheduler.start()
 
     # 시작 알림
-    await notifier.notify_system_start(
-        mode="알림 서비스 시작",
-        watchlist_size=0,
-    )
+    await notifier.notify_system_start(mode="알림 서비스 시작")
+
+    # 시작 직후 포지션 현황 1회 발송 (현재 포트폴리오 즉시 확인)
+    await job_portfolio_status()
 
     logger.info("✓ 알림/리포트 서버 준비 완료")
 
@@ -117,6 +117,7 @@ class ErrorNotifyRequest(BaseModel):
 class SystemStartRequest(BaseModel):
     mode: str = "시뮬레이션"
     watchlist_size: int = 0
+    portfolio_count: int = -1
 
 
 class PortfolioStatusRequest(BaseModel):
@@ -226,6 +227,7 @@ async def notify_system_start(req: SystemStartRequest) -> Dict[str, Any]:
     await notifier.notify_system_start(
         mode=req.mode,
         watchlist_size=req.watchlist_size,
+        portfolio_count=req.portfolio_count,
     )
     return {"success": True}
 

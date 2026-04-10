@@ -197,15 +197,23 @@ class TelegramNotifier:
 
     # ── 시스템 알림 ─────────────────────────────────────────
 
-    async def notify_system_start(self, mode: str = "시뮬레이션", watchlist_size: int = 0):
+    async def notify_system_start(
+        self,
+        mode: str = "시뮬레이션",
+        watchlist_size: int = 0,
+        portfolio_count: int = -1,
+    ):
         """시스템 시작 알림"""
-        msg = (
-            f"🤖 *자동매매 시스템 시작*\n"
-            f"모드: {mode}\n"
-            f"종목 수: {watchlist_size}개\n"
-            f"시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        )
-        await self.send(msg)
+        lines = [
+            f"🤖 *자동매매 시스템 시작*",
+            f"모드: {mode}",
+        ]
+        if portfolio_count >= 0:
+            lines.append(f"보유 포지션: {portfolio_count}개")
+        if watchlist_size > 0:
+            lines.append(f"백엔드 워치리스트: {watchlist_size}개")
+        lines.append(f"시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        await self.send("\n".join(lines))
 
     async def notify_error(self, context: str, error: str):
         """오류 알림"""
