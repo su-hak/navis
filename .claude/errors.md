@@ -1,443 +1,114 @@
 Starting Container
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/_compat.py", line 30, in asyncio_run
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 86, in _serve
-    config.load()
-    return runner.run(main)
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 441, in load
-           ^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 79, in serve
-    await self._serve(sockets)
-Traceback (most recent call last):
-  File "/app/ai_team/start.py", line 7, in <module>
-    uvicorn.run(
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/main.py", line 606, in run
-    server.run()
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 75, in run
-    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    self.loaded_app = import_from_string(self.app)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 22, in import_from_string
-    raise exc from None
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
-    module = importlib.import_module(module_str)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-           ^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-    return self._loop.run_until_complete(task)
-  File "<frozen importlib._bootstrap>", line 1140, in _find_and_load_unlocked
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-ModuleNotFoundError: No module named 'ai_team'
-  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
-Traceback (most recent call last):
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 79, in serve
-  File "/app/ai_team/start.py", line 7, in <module>
-    await self._serve(sockets)
-    uvicorn.run(
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/main.py", line 606, in run
-    server.run()
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 75, in run
-    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/_compat.py", line 30, in asyncio_run
-    return runner.run(main)
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 86, in _serve
-    config.load()
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 441, in load
-    self.loaded_app = import_from_string(self.app)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 22, in import_from_string
-    raise exc from None
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
-    module = importlib.import_module(module_str)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1140, in _find_and_load_unlocked
-ModuleNotFoundError: No module named 'ai_team'
-Traceback (most recent call last):
-  File "/app/ai_team/start.py", line 7, in <module>
-    uvicorn.run(
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/main.py", line 606, in run
-    server.run()
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 75, in run
-    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/_compat.py", line 30, in asyncio_run
-    return runner.run(main)
-           ^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 79, in serve
-    await self._serve(sockets)
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 86, in _serve
-    config.load()
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 441, in load
-    self.loaded_app = import_from_string(self.app)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 22, in import_from_string
-    raise exc from None
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
-    module = importlib.import_module(module_str)
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1140, in _find_and_load_unlocked
-ModuleNotFoundError: No module named 'ai_team'
-    config.load()
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 441, in load
-Traceback (most recent call last):
-  File "/app/ai_team/start.py", line 7, in <module>
-    uvicorn.run(
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/main.py", line 606, in run
-    server.run()
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 75, in run
-    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/_compat.py", line 30, in asyncio_run
-    return runner.run(main)
-           ^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 79, in serve
-    await self._serve(sockets)
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 86, in _serve
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-    self.loaded_app = import_from_string(self.app)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 22, in import_from_string
-    raise exc from None
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-    File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
-    module = importlib.import_module(module_str)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1140, in _find_and_load_unlocked
-ModuleNotFoundError: No module named 'ai_team'
-    return runner.run(main)
-    config.load()
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 441, in load
-           ^^^^^^^^^^^^^^^^
-  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
-  File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 79, in serve
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    await self._serve(sockets)
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 86, in _serve
-Traceback (most recent call last):
-  File "/app/ai_team/start.py", line 7, in <module>
-    uvicorn.run(
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/main.py", line 606, in run
-    server.run()
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 75, in run
-    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/_compat.py", line 30, in asyncio_run
-    raise exc from None
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
-    module = importlib.import_module(module_str)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-    self.loaded_app = import_from_string(self.app)
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 22, in import_from_string
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1140, in _find_and_load_unlocked
-ModuleNotFoundError: No module named 'ai_team'
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 86, in _serve
-Traceback (most recent call last):
-    return runner.run(main)
-    config.load()
-           ^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 441, in load
-  File "/app/ai_team/start.py", line 7, in <module>
-  File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-    uvicorn.run(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/main.py", line 606, in run
-  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 79, in serve
-    server.run()
-    await self._serve(sockets)
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 75, in run
-    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/_compat.py", line 30, in asyncio_run
-    self.loaded_app = import_from_string(self.app)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 22, in import_from_string
-    raise exc from None
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
-    module = importlib.import_module(module_str)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1140, in _find_and_load_unlocked
-ModuleNotFoundError: No module named 'ai_team'
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Traceback (most recent call last):
-  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
-  File "/app/ai_team/start.py", line 7, in <module>
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 79, in serve
-    uvicorn.run(
-    await self._serve(sockets)
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/main.py", line 606, in run
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 86, in _serve
-    server.run()
-    config.load()
-      File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1140, in _find_and_load_unlocked
-ModuleNotFoundError: No module named 'ai_team'
-Traceback (most recent call last):
-  File "/app/ai_team/start.py", line 7, in <module>
-    uvicorn.run(
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/main.py", line 606, in run
-    server.run()
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 75, in run
-    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/_compat.py", line 30, in asyncio_run
-    return runner.run(main)
-           ^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 79, in serve
-    await self._serve(sockets)
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 86, in _serve
-    config.load()
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 441, in load
-    self.loaded_app = import_from_string(self.app)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 22, in import_from_string
-    raise exc from None
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
-    module = importlib.import_module(module_str)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1140, in _find_and_load_unlocked
-ModuleNotFoundError: No module named 'ai_team'
-Traceback (most recent call last):
-  File "/app/ai_team/start.py", line 7, in <module>
-    uvicorn.run(
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/main.py", line 606, in run
-    server.run()
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 75, in run
-    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/_compat.py", line 30, in asyncio_run
-    return runner.run(main)
-           ^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 79, in serve
-    await self._serve(sockets)
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 86, in _serve
-    config.load()
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 441, in load
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-    self.loaded_app = import_from_string(self.app)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 22, in import_from_string
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-    raise exc from None
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-    module = importlib.import_module(module_str)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-    return _bootstrap._gcd_import(name[level:], package, level)
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1140, in _find_and_load_unlocked
-ModuleNotFoundError: No module named 'ai_team'
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 441, in load
-    return self._loop.run_until_complete(task)
-Traceback (most recent call last):
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 79, in serve
-  File "/app/ai_team/start.py", line 7, in <module>
-    await self._serve(sockets)
-    uvicorn.run(
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 86, in _serve
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/main.py", line 606, in run
-    config.load()
-    server.run()
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 75, in run
-    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-             File "/usr/local/lib/python3.11/site-packages/uvicorn/_compat.py", line 30, in asyncio_run
-    return runner.run(main)
-           ^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
-    self.loaded_app = import_from_string(self.app)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 22, in import_from_string
-    raise exc from None
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
-    module = importlib.import_module(module_str)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1140, in _find_and_load_unlocked
-ModuleNotFoundError: No module named 'ai_team'
-    return runner.run(main)
-  File "/app/ai_team/start.py", line 7, in <module>
-           ^^^^^^^^^^^^^^^^
-    uvicorn.run(
-  File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/main.py", line 606, in run
-    return self._loop.run_until_complete(task)
-    server.run()
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 75, in run
-  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 79, in serve
-    await self._serve(sockets)
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/server.py", line 86, in _serve
-    config.load()
-    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/config.py", line 441, in load
-Traceback (most recent call last):
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/_compat.py", line 30, in asyncio_run
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-    self.loaded_app = import_from_string(self.app)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 22, in import_from_string
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-    raise exc from None
-  File "<frozen importlib._bootstrap>", line 1126, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "/usr/local/lib/python3.11/site-packages/uvicorn/importer.py", line 19, in import_from_string
-  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-    module = importlib.import_module(module_str)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1140, in _find_and_load_unlocked
-ModuleNotFoundError: No module named 'ai_team'
+INFO:     Started server process [2]
+INFO:     Waiting for application startup.
+2026-04-10 05:53:45,423 [INFO] notification_team.main: ============================================================
+2026-04-10 05:53:45,423 [INFO] notification_team.main:   Navis 알림/리포트 팀 서버 시작
+2026-04-10 05:53:45,423 [INFO] notification_team.main: ============================================================
+2026-04-10 05:53:45,548 [INFO] notification_team.report_builder: ✓ 리포트 DB 연결: mysql.railway.internal:3306/railway
+2026-04-10 05:53:45,548 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-10 05:53:45,548 [INFO] notification_team.scheduler: ✓ 일일 리포트 등록: 월~금 16:10 ET
+2026-04-10 05:53:45,548 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-10 05:53:45,548 [INFO] notification_team.scheduler: ✓ 주간 리포트 등록: fri 16:30 ET
+2026-04-10 05:53:45,550 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-10 05:53:45,550 [INFO] notification_team.scheduler: ✓ 포지션 현황 등록: 매 60분
+2026-04-10 05:53:45,550 [INFO] apscheduler.scheduler: Added job "일일 리포트" to job store "default"
+2026-04-10 05:53:45,550 [INFO] apscheduler.scheduler: Added job "주간 리포트" to job store "default"
+2026-04-10 05:53:45,550 [INFO] apscheduler.scheduler: Added job "포지션 현황" to job store "default"
+2026-04-10 05:53:45,550 [INFO] apscheduler.scheduler: Scheduler started
+2026-04-10 05:53:45,550 [INFO] notification_team.scheduler: ✓ 알림 스케줄러 시작: ['portfolio_status', 'daily_report', 'weekly_report']
+ERROR:    Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/starlette/routing.py", line 638, in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+  File "/usr/local/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/app/notification_team/main.py", line 54, in lifespan
+    positions = await _get_positions_from_backend()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+NameError: name '_get_positions_from_backend' is not defined
+ERROR:    Application startup failed. Exiting.
+INFO:     Started server process [2]
+INFO:     Waiting for application startup.
+2026-04-10 05:53:47,290 [INFO] notification_team.main: ============================================================
+2026-04-10 05:53:47,290 [INFO] notification_team.main:   Navis 알림/리포트 팀 서버 시작
+2026-04-10 05:53:47,290 [INFO] notification_team.main: ============================================================
+2026-04-10 05:53:47,386 [INFO] notification_team.report_builder: ✓ 리포트 DB 연결: mysql.railway.internal:3306/railway
+2026-04-10 05:53:47,386 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-10 05:53:47,386 [INFO] notification_team.scheduler: ✓ 일일 리포트 등록: 월~금 16:10 ET
+2026-04-10 05:53:47,387 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-10 05:53:47,387 [INFO] notification_team.scheduler: ✓ 주간 리포트 등록: fri 16:30 ET
+2026-04-10 05:53:47,388 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-10 05:53:47,388 [INFO] notification_team.scheduler: ✓ 포지션 현황 등록: 매 60분
+2026-04-10 05:53:47,389 [INFO] apscheduler.scheduler: Added job "일일 리포트" to job store "default"
+2026-04-10 05:53:47,389 [INFO] apscheduler.scheduler: Added job "주간 리포트" to job store "default"
+2026-04-10 05:53:47,389 [INFO] apscheduler.scheduler: Added job "포지션 현황" to job store "default"
+2026-04-10 05:53:47,389 [INFO] apscheduler.scheduler: Scheduler started
+2026-04-10 05:53:47,389 [INFO] notification_team.scheduler: ✓ 알림 스케줄러 시작: ['portfolio_status', 'daily_report', 'weekly_report']
+ERROR:    Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/starlette/routing.py", line 638, in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+  File "/usr/local/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/app/notification_team/main.py", line 54, in lifespan
+    positions = await _get_positions_from_backend()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+NameError: name '_get_positions_from_backend' is not defined
+ERROR:    Application startup failed. Exiting.
+INFO:     Started server process [2]
+INFO:     Waiting for application startup.
+2026-04-10 05:53:48,933 [INFO] notification_team.main: ============================================================
+2026-04-10 05:53:48,933 [INFO] notification_team.main:   Navis 알림/리포트 팀 서버 시작
+2026-04-10 05:53:48,933 [INFO] notification_team.main: ============================================================
+2026-04-10 05:53:49,032 [INFO] notification_team.report_builder: ✓ 리포트 DB 연결: mysql.railway.internal:3306/railway
+2026-04-10 05:53:49,032 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-10 05:53:49,032 [INFO] notification_team.scheduler: ✓ 일일 리포트 등록: 월~금 16:10 ET
+2026-04-10 05:53:49,033 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-10 05:53:49,033 [INFO] notification_team.scheduler: ✓ 주간 리포트 등록: fri 16:30 ET
+2026-04-10 05:53:49,034 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-10 05:53:49,034 [INFO] notification_team.scheduler: ✓ 포지션 현황 등록: 매 60분
+2026-04-10 05:53:49,034 [INFO] apscheduler.scheduler: Added job "일일 리포트" to job store "default"
+2026-04-10 05:53:49,035 [INFO] apscheduler.scheduler: Added job "주간 리포트" to job store "default"
+2026-04-10 05:53:49,035 [INFO] apscheduler.scheduler: Added job "포지션 현황" to job store "default"
+2026-04-10 05:53:49,035 [INFO] apscheduler.scheduler: Scheduler started
+2026-04-10 05:53:49,035 [INFO] notification_team.scheduler: ✓ 알림 스케줄러 시작: ['portfolio_status', 'daily_report', 'weekly_report']
+ERROR:    Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/starlette/routing.py", line 638, in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+  File "/usr/local/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/app/notification_team/main.py", line 54, in lifespan
+    positions = await _get_positions_from_backend()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+NameError: name '_get_positions_from_backend' is not defined
+ERROR:    Application startup failed. Exiting.
+INFO:     Started server process [2]
+INFO:     Waiting for application startup.
+2026-04-10 05:53:50,622 [INFO] notification_team.main: ============================================================
+2026-04-10 05:53:50,623 [INFO] notification_team.main:   Navis 알림/리포트 팀 서버 시작
+2026-04-10 05:53:50,623 [INFO] notification_team.main: ============================================================
+2026-04-10 05:53:50,721 [INFO] notification_team.report_builder: ✓ 리포트 DB 연결: mysql.railway.internal:3306/railway
+2026-04-10 05:53:50,722 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-10 05:53:50,722 [INFO] notification_team.scheduler: ✓ 일일 리포트 등록: 월~금 16:10 ET
+2026-04-10 05:53:50,722 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-10 05:53:50,722 [INFO] notification_team.scheduler: ✓ 주간 리포트 등록: fri 16:30 ET
+2026-04-10 05:53:50,723 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-04-10 05:53:50,723 [INFO] notification_team.scheduler: ✓ 포지션 현황 등록: 매 60분
+2026-04-10 05:53:50,724 [INFO] apscheduler.scheduler: Added job "일일 리포트" to job store "default"
+2026-04-10 05:53:50,724 [INFO] apscheduler.scheduler: Added job "주간 리포트" to job store "default"
+NameError: name '_get_positions_from_backend' is not defined
+  File "/usr/local/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+2026-04-10 05:53:50,724 [INFO] apscheduler.scheduler: Added job "포지션 현황" to job store "default"
+  File "/app/notification_team/main.py", line 54, in lifespan
+           ^^^^^^^^^^^^^^^^^^^^^
+ERROR:    Application startup failed. Exiting.
+    positions = await _get_positions_from_backend()
+2026-04-10 05:53:50,724 [INFO] apscheduler.scheduler: Scheduler started
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-04-10 05:53:50,724 [INFO] notification_team.scheduler: ✓ 알림 스케줄러 시작: ['portfolio_status', 'daily_report', 'weekly_report']
+    async with self.lifespan_context(app) as maybe_state:
+ERROR:    Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/starlette/routing.py", line 638, in lifespan
+
