@@ -617,6 +617,17 @@ class AutoTradingBotV2:
             if not self.auto_trading_enabled:
                 continue
 
+            # 주말이면 긴 시간 대기
+            try:
+                from zoneinfo import ZoneInfo
+                _et = ZoneInfo("America/New_York")
+            except ImportError:
+                import pytz
+                _et = pytz.timezone("America/New_York")
+            if datetime.now(_et).weekday() >= 5:
+                await asyncio.sleep(3600)  # 1시간마다 재확인
+                continue
+
             is_market = self._is_market_hours()
             is_extended = self._is_extended_hours()
 
@@ -710,16 +721,56 @@ class AutoTradingBotV2:
             except Exception as e:
                 logger.error(f"손절/익절 모니터 오류: {e}")
 
+    def _seconds_until_monday_premarket(self) -> float:
+        """주말일 경우 월요일 프리마켓(ET 04:00)까지 남은 초를 반환"""
+        try:
+            from zoneinfo import ZoneInfo
+            et_tz = ZoneInfo("America/New_York")
+        except ImportError:
+            import pytz
+            et_tz = pytz.timezone("America/New_York")
+
+        from datetime import timedelta
+        now_et = datetime.now(et_tz)
+        # 토요일=5, 일요일=6
+        days_until_monday = (7 - now_et.weekday()) % 7  # 0이면 오늘이 월요일
+        if days_until_monday == 0:
+            days_until_monday = 7  # 이미 월요일이면 다음 주 월요일 (이 함수는 주말에만 호출)
+        next_monday = (now_et + timedelta(days=days_until_monday)).replace(
+            hour=4, minute=0, second=0, microsecond=0
+        )
+        return (next_monday - now_et).total_seconds()
+
     async def _stage1_market_scan(self):
         """
         Stage 1: 전체 시장 스캔 및 워치리스트 생성
 
-        3~5분마다 실행
+        3~5분마다 실행. 주말에는 월요일 프리마켓(ET 04:00)까지 대기.
         """
         scan_count = 0
         while self.is_running:
             try:
                 scan_count += 1
+
+                # 주말 체크 — 월요일 프리마켓까지 통째로 대기
+                try:
+                    from zoneinfo import ZoneInfo
+                    et_tz = ZoneInfo("America/New_York")
+                except ImportError:
+                    import pytz
+                    et_tz = pytz.timezone("America/New_York")
+
+                now_et = datetime.now(et_tz)
+                if now_et.weekday() >= 5:  # 토(5), 일(6)
+                    sleep_sec = self._seconds_until_monday_premarket()
+                    wake_time = now_et + __import__('datetime').timedelta(seconds=sleep_sec)
+                    logger.info(
+                        f"주말 휴장 — 월요일 프리마켓({wake_time.strftime('%Y-%m-%d %H:%M ET')})까지 "
+                        f"{sleep_sec / 3600:.1f}시간 대기합니다."
+                    )
+                    await asyncio.sleep(sleep_sec)
+                    continue
+
                 logger.info(f"\n{'=' * 70}")
                 logger.info(f"[Stage 1] 전체 시장 스캔 시작")
                 logger.info(f"  시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")

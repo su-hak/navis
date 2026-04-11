@@ -42,6 +42,9 @@ class NewsSentiment(BaseModel):
 class NewsAnalyzer:
     """뉴스 분석기"""
 
+    # 크레딧 부족으로 비활성화된 경우 클래스 전체에서 공유
+    _credit_exhausted: bool = False
+
     def __init__(self):
         self.news_collector = NewsCollector()
 
@@ -96,6 +99,17 @@ class NewsAnalyzer:
         """
         logger.info(f"Analyzing news sentiment for {symbol}")
 
+        # 크레딧 부족 상태면 API 호출 건너뜀
+        if NewsAnalyzer._credit_exhausted:
+            return {
+                'sentiment_score': 0.0,
+                'sentiment_label': 'neutral',
+                'key_events': [],
+                'risk_factors': [],
+                'summary': 'AI 분석 비활성화 (크레딧 부족)',
+                'news_count': 0
+            }
+
         try:
             # 뉴스 수집
             news_list = self.news_collector.collect_news(symbol)
@@ -134,13 +148,22 @@ class NewsAnalyzer:
             }
 
         except Exception as e:
-            logger.error(f"Error analyzing news for {symbol}: {e}")
+            err_str = str(e)
+            # 크레딧 부족 에러 감지 → 이후 모든 호출 차단
+            if 'credit balance is too low' in err_str or 'credit_balance' in err_str:
+                NewsAnalyzer._credit_exhausted = True
+                logger.error(
+                    "Anthropic API 크레딧 부족! AI 뉴스 분석을 비활성화합니다. "
+                    "console.anthropic.com > Plans & Billing에서 크레딧을 충전하세요."
+                )
+            else:
+                logger.error(f"Error analyzing news for {symbol}: {e}")
             return {
                 'sentiment_score': 0.0,
                 'sentiment_label': 'neutral',
                 'key_events': [],
                 'risk_factors': [],
-                'summary': f'Error: {str(e)}',
+                'summary': f'Error: {err_str}',
                 'news_count': 0
             }
 
