@@ -1,7 +1,9 @@
 """Telegram bot interface for the AI agent."""
 import sys
+import asyncio
 from typing import Dict, List
 from telegram import Update
+from telegram.error import Conflict
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -220,7 +222,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle errors."""
-    logger.error(f"Update {update} caused error {context.error}")
+    if isinstance(context.error, Conflict):
+        # 다른 인스턴스가 이미 폴링 중 → 60초 대기 후 자동 재시도
+        # (이전 Railway 인스턴스가 종료되면 자연히 해소됨)
+        logger.warning(
+            "다른 봇 인스턴스가 폴링 중입니다. "
+            "이전 배포가 종료될 때까지 60초 대기 후 재시도합니다."
+        )
+        await asyncio.sleep(60)
+    else:
+        logger.error(f"Update {update} caused error {context.error}")
 
 
 def main():

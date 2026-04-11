@@ -19,6 +19,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY data_collection/ ./data_collection/
 COPY execution_team/ ./execution_team/
 COPY strategy_engine/ ./strategy_engine/
+COPY ai_team/ ./ai_team/
+COPY notification_team/ ./notification_team/
 COPY utils/ ./utils/
 COPY agents/ ./agents/
 COPY tools/ ./tools/

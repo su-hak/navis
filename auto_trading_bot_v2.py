@@ -885,22 +885,45 @@ def _run_telegram_bot():
 
     python-telegram-bot v20+는 내부적으로 asyncio를 사용하므로
     서브 스레드에서는 전용 이벤트 루프를 생성해야 함.
+
+    Conflict(409) 발생 시: 이전 인스턴스가 죽을 때까지 재시도 (최대 10분).
     """
     import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        from telegram_bot import main as telegram_main
-        logger.info("텔레그램 봇 시작 중...")
-        telegram_main()
-    except ImportError as e:
-        logger.warning(f"⚠️ 텔레그램 봇 모듈 로드 실패 (선택적 기능): {e}")
-    except Exception as e:
-        logger.error(f"텔레그램 봇 오류: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        loop.close()
+    import time
+
+    deadline = time.time() + 600  # 최대 10분 대기
+    while time.time() < deadline:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            from telegram_bot import main as telegram_main
+            logger.info("텔레그램 봇 시작 중...")
+            telegram_main()
+            break  # 정상 종료 시 루프 탈출
+        except ImportError as e:
+            logger.warning(f"⚠️ 텔레그램 봇 모듈 로드 실패 (선택적 기능): {e}")
+            break
+        except Exception as e:
+            err_str = str(e)
+            if "Conflict" in err_str or "409" in err_str:
+                remaining = int(deadline - time.time())
+                logger.warning(
+                    f"텔레그램 Conflict - 이전 인스턴스 종료 대기 중 "
+                    f"(남은 대기: {remaining}초)..."
+                )
+                loop.close()
+                time.sleep(30)
+                continue
+            else:
+                logger.error(f"텔레그램 봇 오류: {e}")
+                import traceback
+                traceback.print_exc()
+                break
+        finally:
+            if not loop.is_closed():
+                loop.close()
+    else:
+        logger.error("텔레그램 봇: 10분 내 이전 인스턴스가 종료되지 않아 포기합니다.")
 
 
 def main():
