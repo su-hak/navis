@@ -149,6 +149,10 @@ class AutoTradingBotV2:
         self._init_execution_team()
         self._init_monitoring_system()
 
+        # 매매 쿨다운 설정 (매도 후 동일 종목 재진입 방지)
+        self.trade_cooldown_minutes = int(os.getenv('TRADE_COOLDOWN_MINUTES', '120'))  # 기본 2시간
+        self._recently_sold: Dict[str, datetime] = {}  # {symbol: 매도 완료 시각}
+
         # 상태 추적
         self.daily_pl = 0.0
         self.trade_count = 0
@@ -308,6 +312,17 @@ class AutoTradingBotV2:
         if any(p.symbol == symbol for p in positions):
             logger.info(f"{symbol} 이미 보유 중 - 중복 매수 방지")
             return
+
+        # 쿨다운 체크 (최근 매도 종목 재진입 방지)
+        if symbol in self._recently_sold:
+            elapsed = (datetime.now() - self._recently_sold[symbol]).total_seconds() / 60.0
+            if elapsed < self.trade_cooldown_minutes:
+                remaining = self.trade_cooldown_minutes - elapsed
+                logger.info(
+                    f"{symbol} 쿨다운 중 - 재진입 차단 "
+                    f"(남은 시간: {remaining:.0f}분 / 총 {self.trade_cooldown_minutes}분)"
+                )
+                return
 
         # 투자 금액 계산
         account = self.execution_engine.get_account()
@@ -522,6 +537,9 @@ class AutoTradingBotV2:
             result = self.execution_engine.execute_order(order_signal)
             if result.success:
                 logger.warning(f"✓ {symbol} 손절 완료: {qty}주 @ ${result.filled_price:.2f}")
+                # 쿨다운 등록
+                self._recently_sold[symbol] = datetime.now()
+                logger.info(f"[쿨다운 등록] {symbol} → {self.trade_cooldown_minutes}분간 재매수 차단")
                 self._send_telegram_notify(
                     "sell",
                     symbol=symbol,
@@ -670,6 +688,11 @@ class AutoTradingBotV2:
                             f"[{sell_type}] {symbol} {session} 주문 완료 "
                             f"(Alpaca ID: {order.id})"
                         )
+                        # 쿨다운 등록: 매도 완료 후 동일 종목 재진입 방지
+                        self._recently_sold[symbol] = datetime.now()
+                        logger.info(
+                            f"[쿨다운 등록] {symbol} → {self.trade_cooldown_minutes}분간 재매수 차단"
+                        )
                         self._send_telegram_notify(
                             "sell",
                             symbol=symbol,
@@ -728,6 +751,16 @@ class AutoTradingBotV2:
                         await self.high_freq_monitor.start()
                 else:
                     logger.warning("워치리스트가 비어있습니다")
+
+                # 만료된 쿨다운 항목 정리
+                now = datetime.now()
+                expired = [
+                    s for s, t in self._recently_sold.items()
+                    if (now - t).total_seconds() / 60.0 >= self.trade_cooldown_minutes
+                ]
+                for s in expired:
+                    del self._recently_sold[s]
+                    logger.info(f"[쿨다운 해제] {s} 재매수 가능")
 
                 # 1시간마다(약 12회 스캔) 오래된 주문 메모리 정리
                 if scan_count % 12 == 0 and hasattr(self, 'order_manager') and self.order_manager:

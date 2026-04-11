@@ -71,26 +71,52 @@ class WatchlistGenerator:
         self.universe = self._fallback_universe
 
     def _get_default_universe(self) -> List[str]:
-        """폴백용 기본 종목 유니버스 (Alpaca API 실패 시)"""
+        """폴백용 기본 종목 유니버스 (Alpaca API 실패 시)
+
+        S&P 500 주요 종목 + 고변동성 중소형주 포함, 약 200개
+        API가 실패해도 최소한의 다양성을 확보하기 위함
+        """
         return [
-            # 테크
-            'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'NFLX',
-            # 금융
-            'JPM', 'BAC', 'WFC', 'GS', 'MS',
-            # 헬스케어
-            'JNJ', 'UNH', 'PFE', 'ABBV', 'TMO',
-            # 소비재
-            'WMT', 'HD', 'DIS', 'NKE', 'SBUX',
-            # 에너지
-            'XOM', 'CVX', 'COP',
-            # 통신
-            'T', 'VZ', 'TMUS',
-            # 인더스트리얼
-            'BA', 'CAT', 'GE', 'UPS',
-            # 리테일/기타
-            'COST', 'TGT', 'AMD', 'INTC', 'CSCO', 'ORCL', 'ADBE',
-            # 고변동성 인기 종목
-            'COIN', 'SNAP', 'UBER', 'LYFT', 'SQ', 'ROKU', 'PLTR', 'SOFI'
+            # S&P 500 대형주 - 테크
+            'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'META', 'NVDA', 'TSLA',
+            'NFLX', 'AMD', 'INTC', 'CSCO', 'ORCL', 'ADBE', 'CRM', 'NOW',
+            'QCOM', 'TXN', 'AVGO', 'MU', 'LRCX', 'KLAC', 'AMAT', 'MRVL',
+            'PANW', 'CRWD', 'SNOW', 'DDOG', 'ZS', 'NET', 'MDB', 'GTLB',
+            # S&P 500 대형주 - 금융
+            'JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'AXP', 'BLK', 'SCHW',
+            'COF', 'USB', 'PNC', 'TFC', 'SPGI', 'MCO', 'ICE', 'CME',
+            # S&P 500 대형주 - 헬스케어
+            'JNJ', 'UNH', 'PFE', 'ABBV', 'TMO', 'ABT', 'DHR', 'BMY',
+            'LLY', 'MRK', 'AMGN', 'GILD', 'REGN', 'BIIB', 'VRTX', 'MRNA',
+            # S&P 500 대형주 - 소비재/리테일
+            'WMT', 'HD', 'DIS', 'NKE', 'SBUX', 'MCD', 'TGT', 'COST',
+            'LOW', 'TJX', 'BKNG', 'ABNB', 'MAR', 'HLT',
+            # S&P 500 대형주 - 에너지/산업
+            'XOM', 'CVX', 'COP', 'SLB', 'EOG', 'MPC', 'VLO', 'PSX',
+            'BA', 'CAT', 'GE', 'UPS', 'FDX', 'HON', 'RTX', 'LMT', 'NOC',
+            # S&P 500 대형주 - 통신/유틸리티
+            'T', 'VZ', 'TMUS', 'CMCSA', 'CHTR',
+            # ETF (지수 추종)
+            'SPY', 'QQQ', 'IWM', 'DIA', 'GLD', 'SLV', 'USO',
+            # 고변동성 대형 성장주
+            'COIN', 'MSTR', 'MARA', 'RIOT', 'HUT',   # 코인 관련
+            'RIVN', 'LCID', 'NIO', 'XPEV', 'LI',      # EV
+            'PLTR', 'SOFI', 'HOOD', 'AFRM', 'UPST',   # 핀테크
+            'SNAP', 'PINS', 'RBLX', 'U', 'EA',         # 소셜/게임
+            'UBER', 'LYFT', 'DASH', 'ABNB',            # 공유경제
+            'SQ', 'PYPL', 'V', 'MA',                   # 결제
+            'SHOP', 'ETSY', 'EBAY', 'W',               # 이커머스
+            'ROKU', 'SPOT', 'PARA', 'WBD',             # 스트리밍/미디어
+            'TWLO', 'ZM', 'DOCU', 'BOX', 'ESTC',      # 클라우드 SaaS
+            'IONQ', 'RGTI', 'QUBT',                    # 양자컴퓨팅
+            'SMCI', 'HPE', 'DELL', 'WDC', 'STX',      # 하드웨어
+            # 중소형 바이오/헬스케어 (고변동성)
+            'SAVA', 'ACHR', 'JOBY', 'ARCHER',
+            'NVAX', 'BNTX', 'SRPT', 'BLUE', 'EDIT',
+            # 중소형 테크/기타 (고변동성)
+            'WOLF', 'STEM', 'BLNK', 'CHPT', 'PLUG',   # 그린에너지
+            'SPCE', 'RKT', 'OPEN', 'OFGD',            # 기타 고변동성
+            'CLOV', 'HLTH', 'HIMS', 'ACMR', 'CRSR',
         ]
 
     def _is_market_hours(self) -> bool:
@@ -128,7 +154,8 @@ class WatchlistGenerator:
                 asset_class=AssetClass.US_EQUITY,
                 status=AssetStatus.ACTIVE
             )
-            assets = await asyncio.get_event_loop().run_in_executor(
+            loop = asyncio.get_running_loop()
+            assets = await loop.run_in_executor(
                 None, lambda: self.trading_client.get_all_assets(request)
             )
 
@@ -149,7 +176,10 @@ class WatchlistGenerator:
             return symbols
 
         except Exception as e:
-            logger.error(f"동적 유니버스 조회 실패, 폴백 유니버스 사용: {e}")
+            import traceback
+            logger.error(f"동적 유니버스 조회 실패 - 오류 타입: {type(e).__name__}, 메시지: {e}")
+            logger.error(f"상세 스택:\n{traceback.format_exc()}")
+            logger.warning(f"폴백 유니버스({len(self._fallback_universe)}개)로 대체 중 - 종목 다양성 크게 감소!")
             if self._universe_cache:
                 return self._universe_cache
             return self._fallback_universe

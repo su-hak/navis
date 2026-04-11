@@ -256,8 +256,14 @@ def main():
     print(f"  Bot is running... Press Ctrl+C to stop")
     print(f"{'='*60}\n")
 
+    # drop_pending_updates=True: 재배포 시 이전 인스턴스의 잔여 폴링 세션을 강제 종료하고
+    # 밀린 업데이트를 버림으로써 Conflict(409) 오류를 방지
     # stop_signals=None: 서브 스레드에서 실행 시 signal handler 등록 시도 방지
-    application.run_polling(allowed_updates=Update.ALL_TYPES, stop_signals=None)
+    application.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+        stop_signals=None,
+    )
 
 
 if __name__ == "__main__":
