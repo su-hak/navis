@@ -685,21 +685,21 @@ class AutoTradingBotV2:
                 loop = asyncio.get_event_loop()
 
                 # ── pending_sell_symbols 정리: Alpaca open orders 확인 ──
-                if self._pending_sell_symbols:
-                    try:
-                        open_orders = await loop.run_in_executor(
-                            None, lambda: self.broker.api.list_orders(status='open')
-                        )
-                        open_sell_symbols = {
-                            o.symbol for o in open_orders if o.side == 'sell'
-                        }
-                        # 더 이상 open sell 주문이 없는 종목은 pending에서 제거
-                        completed = self._pending_sell_symbols - open_sell_symbols
-                        if completed:
-                            self._pending_sell_symbols -= completed
-                            logger.info(f"[pending 정리] 체결 완료 종목: {completed}")
-                    except Exception as _e:
-                        logger.debug(f"open orders 조회 실패 (무시): {_e}")
+                try:
+                    all_open = await loop.run_in_executor(
+                        None, lambda: self.broker.api.list_orders(status='open')
+                    )
+                    open_sell_symbols = {
+                        o.symbol for o in all_open
+                        if getattr(o, 'side', '') == 'sell'
+                    }
+                    # 체결 완료된 종목은 pending에서 제거
+                    completed = self._pending_sell_symbols - open_sell_symbols
+                    if completed:
+                        self._pending_sell_symbols -= completed
+                        logger.info(f"[pending 정리] 체결 완료 종목: {completed}")
+                except Exception as _e:
+                    logger.debug(f"open orders 전체 조회 실패 (무시): {_e}")
 
                 positions = await loop.run_in_executor(
                     None, self.broker.api.list_positions
@@ -728,11 +728,28 @@ class AutoTradingBotV2:
                     else:
                         continue
 
-                    # ── 중복 주문 방지: 이미 미체결 매도 주문이 있으면 스킵 ──
-                    if symbol in self._pending_sell_symbols:
-                        logger.info(
-                            f"[{sell_type}] {symbol} 미체결 매도 주문 대기 중 - 중복 주문 스킵"
+                    # ── 중복 주문 방지: Alpaca open orders 직접 조회 ──
+                    # in-memory set만으로는 배포 전 기존 미체결 주문을 감지 못하므로
+                    # 항상 Alpaca API로 실제 open sell 주문 여부를 확인한다.
+                    try:
+                        open_orders = await loop.run_in_executor(
+                            None,
+                            lambda s=symbol: self.broker.api.list_orders(
+                                status='open', symbols=[s]
+                            )
                         )
+                        has_open_sell = any(
+                            getattr(o, 'side', '') == 'sell' for o in open_orders
+                        )
+                    except Exception as _oe:
+                        logger.debug(f"{symbol} open orders 조회 실패 (계속 진행): {_oe}")
+                        has_open_sell = symbol in self._pending_sell_symbols
+
+                    if has_open_sell:
+                        logger.info(
+                            f"[{sell_type}] {symbol} 미체결 매도 주문 존재 - 중복 주문 스킵"
+                        )
+                        self._pending_sell_symbols.add(symbol)  # 동기화
                         continue
 
                     try:

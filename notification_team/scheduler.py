@@ -95,8 +95,19 @@ async def job_weekly_report():
     logger.info(f"✓ 주간 리포트 발송 완료 ({len(weekly_data)}거래일)")
 
 
+def _is_weekday_et() -> bool:
+    """현재 시각이 ET 기준 평일(월~금)인지 확인"""
+    from zoneinfo import ZoneInfo
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+    return now_et.weekday() < 5  # 0=월 ~ 4=금
+
+
 async def job_portfolio_status():
-    """장중 포지션 현황 알림 (설정된 간격마다)"""
+    """장중 포지션 현황 알림 (설정된 간격마다, 주말 제외)"""
+    if not _is_weekday_et():
+        logger.debug("[스케줄] 주말 - 포지션 현황 알림 생략")
+        return
+
     logger.info("[스케줄] 포지션 현황 알림 발송 중...")
     account = await _get_account_from_alpaca()
     positions = await _get_positions_from_alpaca()

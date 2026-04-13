@@ -3,8 +3,16 @@
 백엔드 패키지에 의존하지 않고 독립 실행 가능
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
+
+# 한국 표준시 (KST = UTC+9)
+_KST = timezone(timedelta(hours=9))
+
+
+def _now_kst() -> datetime:
+    """현재 한국 시간(KST) 반환"""
+    return datetime.now(_KST)
 
 import httpx
 
@@ -71,7 +79,7 @@ class TelegramNotifier:
             lines.append(f"익절가: ${take_profit:,.2f}")
         if reason:
             lines.append(f"사유: {reason}")
-        lines.append(f"시각: {datetime.now().strftime('%H:%M:%S')}")
+        lines.append(f"시각: {_now_kst().strftime('%H:%M:%S')}")
         await self.send("\n".join(lines))
 
     async def notify_sell(
@@ -93,7 +101,7 @@ class TelegramNotifier:
             f"체결가: ${filled_price:,.2f}\n"
             f"수량: {quantity}주\n"
             f"손익: {pnl_emoji} ${pnl:+,.2f} ({pnl_pct:+.2f}%)\n"
-            f"시각: {datetime.now().strftime('%H:%M:%S')}"
+            f"시각: {_now_kst().strftime('%H:%M:%S')}"
         )
         await self.send(msg)
 
@@ -103,7 +111,7 @@ class TelegramNotifier:
             "⚠️ *거래 중단 - 리스크 한계*\n"
             f"사유: {reason}\n"
             f"일일 손익: ${daily_pnl:+,.2f}\n"
-            f"시각: {datetime.now().strftime('%H:%M:%S')}"
+            f"시각: {_now_kst().strftime('%H:%M:%S')}"
         )
         await self.send(msg)
 
@@ -111,7 +119,7 @@ class TelegramNotifier:
 
     async def notify_daily_report(self, report: Dict[str, Any]):
         """일일 리포트 전송"""
-        trade_date = report.get("trade_date", datetime.now().strftime("%Y-%m-%d"))
+        trade_date = report.get("trade_date", _now_kst().strftime("%Y-%m-%d"))
         total_trades = report.get("total_trades", 0)
         winning = report.get("winning_trades", 0)
         losing = report.get("losing_trades", 0)
@@ -198,7 +206,7 @@ class TelegramNotifier:
             if pos_count > 5:
                 lines.append(f"  ... 외 {pos_count - 5}개")
 
-        lines.append(f"시각: {datetime.now().strftime('%H:%M:%S')}")
+        lines.append(f"시각: {_now_kst().strftime('%H:%M:%S')}")
         await self.send("\n".join(lines))
 
     # ── 시스템 알림 ─────────────────────────────────────────
@@ -218,7 +226,7 @@ class TelegramNotifier:
             lines.append(f"보유 포지션: {portfolio_count}개")
         if watchlist_size > 0:
             lines.append(f"백엔드 워치리스트: {watchlist_size}개")
-        lines.append(f"시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append(f"시각: {_now_kst().strftime('%Y-%m-%d %H:%M:%S')}")
         await self.send("\n".join(lines))
 
     async def notify_error(self, context: str, error: str):
@@ -227,7 +235,7 @@ class TelegramNotifier:
             f"❌ *시스템 오류*\n"
             f"위치: {context}\n"
             f"오류: {error}\n"
-            f"시각: {datetime.now().strftime('%H:%M:%S')}"
+            f"시각: {_now_kst().strftime('%H:%M:%S')}"
         )
         await self.send(msg)
 
@@ -236,7 +244,7 @@ class TelegramNotifier:
         msg = (
             f"✅ *텔레그램 알림 테스트*\n"
             f"Navis 자동매매 시스템 알림이 정상 작동합니다.\n"
-            f"시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            f"시각: {_now_kst().strftime('%Y-%m-%d %H:%M:%S')}"
         )
         return await self.send(msg)
 

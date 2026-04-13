@@ -53,8 +53,10 @@ async def lifespan(app: FastAPI):
     # 시작 알림
     await notifier.notify_system_start(mode="알림 서비스 시작")
 
-    # 시작 직후 포지션 현황 1회 발송 (현재 포트폴리오 즉시 확인)
-    await job_portfolio_status()
+    # 시작 직후 포지션 현황 1회 발송 (평일만, 주말 제외)
+    from .scheduler import _is_weekday_et
+    if _is_weekday_et():
+        await job_portfolio_status()
 
     logger.info("✓ 알림/리포트 서버 준비 완료")
 
