@@ -152,11 +152,16 @@ class AutoTradingBotV2:
         # 매매 쿨다운 설정 (매도 후 동일 종목 재진입 방지)
         self.trade_cooldown_minutes = int(os.getenv('TRADE_COOLDOWN_MINUTES', '120'))  # 기본 2시간
         self._recently_sold: Dict[str, datetime] = {}  # {symbol: 매도 완료 시각}
+        self._pending_sell_symbols: set = set()  # 미체결 매도 주문 있는 종목 (중복 주문 방지)
 
         # 상태 추적
         self.daily_pl = 0.0
         self.trade_count = 0
         self.is_running = False
+
+        # DB 연결 (거래 로그 기록용)
+        self._db = None
+        self._init_database()
 
         logger.info("✓ 자동매매 봇 V2 초기화 완료")
 
@@ -248,6 +253,41 @@ class AutoTradingBotV2:
         except Exception as e:
             logger.error(f"✗ Monitoring System 초기화 실패: {e}")
             raise
+
+    def _init_database(self):
+        """DB 연결 초기화 (거래 로그 기록용, 실패해도 봇은 계속 동작)"""
+        try:
+            from backend.database import BackendDatabase
+            self._db = BackendDatabase()
+            ok = self._db.connect()
+            if ok:
+                logger.info("✓ DB 연결 완료 (거래 로그 기록 활성화)")
+            else:
+                self._db = None
+                logger.warning("⚠️ DB 연결 실패 - 거래 로그 비활성화 (봇 계속 동작)")
+        except Exception as e:
+            self._db = None
+            logger.warning(f"⚠️ DB 모듈 로드 실패 - 거래 로그 비활성화: {e}")
+
+    def _log_trade_to_db(self, symbol: str, action: str, quantity: int,
+                         price: float, pnl: float = None, order_id: str = None,
+                         reason: str = None):
+        """DB에 거래 기록 (실패해도 무시)"""
+        if self._db is None:
+            return
+        try:
+            self._db.log_trade(
+                symbol=symbol,
+                action=action,
+                quantity=quantity,
+                price=price,
+                order_id=order_id,
+                pnl=pnl,
+                strategy_id="auto_trading_bot_v2",
+                reason=reason,
+            )
+        except Exception as e:
+            logger.warning(f"거래 로그 DB 저장 실패 (무시): {e}")
 
     async def _on_price_spike(self, signal: dict):
         """
@@ -360,9 +400,16 @@ class AutoTradingBotV2:
             logger.info(f"  체결가: ${result.filled_price:.2f}")
             logger.info(f"  체결 수량: {result.filled_quantity}주")
             self.trade_count += 1
+            filled_price = result.filled_price or signal['current_price']
+            filled_qty = result.filled_quantity or quantity
+            self._log_trade_to_db(
+                symbol=symbol, action="BUY",
+                quantity=filled_qty, price=filled_price,
+                order_id=result.order_id, reason=signal.get('reason'),
+            )
             self._send_telegram_notify("buy", symbol=symbol,
-                                       filled_price=result.filled_price or signal['current_price'],
-                                       quantity=result.filled_quantity or quantity,
+                                       filled_price=filled_price,
+                                       quantity=filled_qty,
                                        reason=signal.get('reason'))
         else:
             logger.error(f"✗ 매수 실패: {result.error_message}")
@@ -636,6 +683,24 @@ class AutoTradingBotV2:
 
             try:
                 loop = asyncio.get_event_loop()
+
+                # ── pending_sell_symbols 정리: Alpaca open orders 확인 ──
+                if self._pending_sell_symbols:
+                    try:
+                        open_orders = await loop.run_in_executor(
+                            None, lambda: self.broker.api.list_orders(status='open')
+                        )
+                        open_sell_symbols = {
+                            o.symbol for o in open_orders if o.side == 'sell'
+                        }
+                        # 더 이상 open sell 주문이 없는 종목은 pending에서 제거
+                        completed = self._pending_sell_symbols - open_sell_symbols
+                        if completed:
+                            self._pending_sell_symbols -= completed
+                            logger.info(f"[pending 정리] 체결 완료 종목: {completed}")
+                    except Exception as _e:
+                        logger.debug(f"open orders 조회 실패 (무시): {_e}")
+
                 positions = await loop.run_in_executor(
                     None, self.broker.api.list_positions
                 )
@@ -663,8 +728,19 @@ class AutoTradingBotV2:
                     else:
                         continue
 
+                    # ── 중복 주문 방지: 이미 미체결 매도 주문이 있으면 스킵 ──
+                    if symbol in self._pending_sell_symbols:
+                        logger.info(
+                            f"[{sell_type}] {symbol} 미체결 매도 주문 대기 중 - 중복 주문 스킵"
+                        )
+                        continue
+
                     try:
                         current_price = float(getattr(position, 'current_price', 0) or 0)
+                        unrealized_pl = float(getattr(position, 'unrealized_pl', 0) or 0)
+
+                        # 미체결 주문 추적 등록
+                        self._pending_sell_symbols.add(symbol)
 
                         if is_market:
                             # 장중: 시장가 주문
@@ -704,16 +780,36 @@ class AutoTradingBotV2:
                         logger.info(
                             f"[쿨다운 등록] {symbol} → {self.trade_cooldown_minutes}분간 재매수 차단"
                         )
+                        # DB 거래 로그 기록
+                        self._log_trade_to_db(
+                            symbol=symbol, action=sell_type,
+                            quantity=qty, price=current_price,
+                            pnl=unrealized_pl, order_id=str(order.id),
+                            reason=f"자동 {sell_type} ({pl_pct:+.2f}%)",
+                        )
+                        # AI 성과 추적기에 결과 기록 (in-context 학습)
+                        try:
+                            from ai_team.performance.tracker import performance_tracker as _pt
+                            _pt.record_outcome(
+                                symbol=symbol,
+                                action=sell_type,
+                                pnl=unrealized_pl,
+                                pnl_pct=pl_pct,
+                            )
+                        except Exception:
+                            pass
                         self._send_telegram_notify(
                             "sell",
                             symbol=symbol,
                             filled_price=current_price,
                             quantity=qty,
-                            pnl=float(position.unrealized_pl),
+                            pnl=unrealized_pl,
                             pnl_pct=pl_pct,
                             sell_type=sell_type
                         )
                     except Exception as e:
+                        # 주문 실패 시 pending에서 제거하여 다음 사이클에 재시도 가능하게
+                        self._pending_sell_symbols.discard(symbol)
                         logger.error(f"[{sell_type}] {symbol} 주문 실패: {e}")
 
             except asyncio.CancelledError:

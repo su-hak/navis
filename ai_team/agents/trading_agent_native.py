@@ -17,6 +17,15 @@ from ai_team.config import config
 
 logger = logging.getLogger(__name__)
 
+# 성과 추적기 (in-context 학습용)
+try:
+    from ai_team.performance.tracker import performance_tracker
+    PERFORMANCE_TRACKING = True
+except Exception as _e:
+    performance_tracker = None
+    PERFORMANCE_TRACKING = False
+    logger.warning(f"성과 추적기 비활성화: {_e}")
+
 # RAG는 optional (LangChain 버전 문제로 실패할 수 있음)
 try:
     from ai_team.rag.retriever import RAGRetriever
@@ -184,10 +193,18 @@ class NativeTradingAgent:
             for key, value in context.items():
                 context_str += f"- {key}: {value}\n"
 
+        # 성과 컨텍스트 (in-context 학습)
+        performance_context = ""
+        symbol_history = ""
+        if PERFORMANCE_TRACKING and performance_tracker is not None:
+            performance_context = performance_tracker.get_performance_context(lookback_days=7)
+            symbol_history = performance_tracker.get_symbol_history(symbol)
+
         # 초기 메시지
         user_message = f"""
 {symbol} 종목을 분석하고 투자 추천을 제공하세요.
 {context_str}
+{symbol_history}
 
 다음 단계를 수행하세요:
 1. analyze_news_sentiment 도구로 뉴스 감성 분석
@@ -197,6 +214,9 @@ class NativeTradingAgent:
 
 각 단계의 근거를 명확히 제시하세요.
 """
+
+        # 시스템 프롬프트에 성과 컨텍스트 동적 주입
+        dynamic_system_prompt = TRADING_AGENT_SYSTEM_PROMPT + performance_context
 
         messages = [{"role": "user", "content": user_message}]
 
@@ -209,12 +229,12 @@ class NativeTradingAgent:
             while steps < max_iterations:
                 steps += 1
 
-                # Claude 호출 (tool calling)
+                # Claude 호출 (tool calling) — 성과 컨텍스트가 반영된 동적 시스템 프롬프트
                 response = self.client.messages.create(
                     model=config.anthropic_model,
                     max_tokens=4096,
                     temperature=config.anthropic_temperature,
-                    system=TRADING_AGENT_SYSTEM_PROMPT,
+                    system=dynamic_system_prompt,
                     tools=self.tools,
                     messages=messages
                 )
@@ -268,6 +288,18 @@ class NativeTradingAgent:
 
                     # 추천 추출
                     recommendation = self._extract_recommendation(final_text)
+
+                    # 성과 추적기에 추천 기록 (in-context 학습 피드백 루프)
+                    if PERFORMANCE_TRACKING and performance_tracker is not None:
+                        try:
+                            performance_tracker.record_recommendation(
+                                symbol=symbol,
+                                recommendation=recommendation,
+                                sentiment_score=score_adjustment,
+                                analysis_summary=final_text[:200],
+                            )
+                        except Exception:
+                            pass
 
                     return {
                         'analysis': final_text,
