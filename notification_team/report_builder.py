@@ -34,9 +34,32 @@ def _alpaca_headers() -> dict:
     }
 
 
+def _get_today_pnl_from_alpaca(client: httpx.Client) -> float:
+    """
+    Alpaca portfolio/history 로 당일 실현+미실현 손익 조회.
+    실패 시 0.0 반환.
+    """
+    try:
+        resp = client.get(
+            f"{config.ALPACA_BASE_URL}/v2/account/portfolio/history",
+            headers=_alpaca_headers(),
+            params={"period": "1D", "timeframe": "1D", "extended_hours": "true"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        pnl_list = data.get("profit_loss") or []
+        if pnl_list:
+            return float(pnl_list[-1] or 0)
+    except Exception as e:
+        logger.warning(f"Alpaca portfolio/history 조회 실패: {e}")
+    return 0.0
+
+
 def get_today_stats_from_alpaca() -> Optional[Dict[str, Any]]:
     """
-    Alpaca /v2/account/activities 로 당일 체결(fill) 내역을 조회.
+    Alpaca API로 당일 거래 통계 조회.
+      - FILL activities → 체결 횟수 (매수/매도 구분)
+      - portfolio/history → 당일 총 손익
     API 키 미설정이거나 조회 실패 시 None 반환.
     """
     if not config.ALPACA_API_KEY or not config.ALPACA_SECRET_KEY:
@@ -48,13 +71,18 @@ def get_today_stats_from_alpaca() -> Optional[Dict[str, Any]]:
 
     try:
         with httpx.Client(timeout=httpx.Timeout(10.0)) as client:
+            # ── 1. 당일 체결 내역 ────────────────────────────
             resp = client.get(
                 f"{config.ALPACA_BASE_URL}/v2/account/activities/FILL",
                 headers=_alpaca_headers(),
-                params={"after": after_ts, "direction": "asc", "page_size": 500},
+                params={"after": after_ts, "direction": "asc", "page_size": 100},
             )
             resp.raise_for_status()
             activities = resp.json()
+
+            # ── 2. 당일 손익 (portfolio history) ─────────────
+            today_pnl = _get_today_pnl_from_alpaca(client)
+
     except Exception as e:
         logger.warning(f"Alpaca activities 조회 실패: {e}")
         return None
@@ -63,40 +91,34 @@ def get_today_stats_from_alpaca() -> Optional[Dict[str, Any]]:
         logger.warning(f"Alpaca activities 응답 형식 오류: {type(activities)}")
         return None
 
-    # FILL 활동 중 당일 매도(sell) 체결만 집계
-    total_fills = len(activities)          # 매수+매도 전체 체결 수
+    total_fills = len(activities)
     sell_fills = [a for a in activities if a.get("side") == "sell"]
+    buy_fills  = [a for a in activities if a.get("side") == "buy"]
 
-    realized_pnl = 0.0
-    winning = 0
-    losing = 0
-
-    # Alpaca FILL에는 profit/loss 필드가 없으므로
-    # cum_qty * (price - avg_entry) 계산 불가 → pnl은 0으로 처리
-    # pnl이 있는 경우만 집계 (미래 확장용)
-    for act in sell_fills:
-        pnl = act.get("profit_loss")
-        if pnl is not None:
-            try:
-                pnl_val = float(pnl)
-                realized_pnl += pnl_val
-                if pnl_val > 0:
-                    winning += 1
-                else:
-                    losing += 1
-            except (ValueError, TypeError):
-                pass
+    # 승/패는 매도 횟수 기준으로 portfolio pnl 부호만 사용
+    # (종목별 pnl은 Alpaca FILL API에서 제공 안 됨)
+    sell_count = len(sell_fills)
+    if sell_count > 0 and today_pnl > 0:
+        winning = sell_count
+        losing  = 0
+    elif sell_count > 0 and today_pnl < 0:
+        winning = 0
+        losing  = sell_count
+    else:
+        winning = 0
+        losing  = 0
 
     logger.info(
-        f"[Alpaca] 당일({today_et}) 체결: 총 {total_fills}건, "
-        f"매도 {len(sell_fills)}건, 실현손익 ${realized_pnl:+,.2f}"
+        f"[Alpaca] 당일({today_et}) 체결: 총 {total_fills}건 "
+        f"(매수 {len(buy_fills)} / 매도 {sell_count}), "
+        f"손익 ${today_pnl:+,.2f}"
     )
 
     return {
         "trade_date": today_et,
         "total_trades": total_fills,
-        "sell_trades": len(sell_fills),
-        "realized_pnl": realized_pnl,
+        "sell_trades": sell_count,
+        "realized_pnl": today_pnl,
         "winning_trades": winning,
         "losing_trades": losing,
         "source": "alpaca",
