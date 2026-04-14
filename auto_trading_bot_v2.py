@@ -445,7 +445,7 @@ class AutoTradingBotV2:
         if result.success:
             logger.info(f"✓ 매수 성공!")
             logger.info(f"  주문 ID: {result.order_id}")
-            logger.info(f"  체결가: ${result.filled_price:.2f}")
+            logger.info(f"  체결가: ${result.filled_price:.2f}" if result.filled_price is not None else "  체결가: (미체결)")
             logger.info(f"  체결 수량: {result.filled_quantity}주")
             self.trade_count += 1
             filled_price = result.filled_price or signal['current_price']
@@ -631,7 +631,7 @@ class AutoTradingBotV2:
             )
             result = self.execution_engine.execute_order(order_signal)
             if result.success:
-                logger.warning(f"✓ {symbol} 손절 완료: {qty}주 @ ${result.filled_price:.2f}")
+                logger.warning(f"✓ {symbol} 손절 완료: {qty}주 @ ${result.filled_price:.2f}" if result.filled_price is not None else f"✓ {symbol} 손절 완료: {qty}주 @ (미체결)")
                 # 쿨다운 등록
                 self._recently_sold[symbol] = datetime.now()
                 logger.info(f"[쿨다운 등록] {symbol} → {self.trade_cooldown_minutes}분간 재매수 차단")
