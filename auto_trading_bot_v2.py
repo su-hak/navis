@@ -258,25 +258,43 @@ class AutoTradingBotV2:
         """DB 연결 초기화 (거래 로그 기록용, 실패해도 봇은 계속 동작)"""
         try:
             from backend.database import BackendDatabase
+            from backend.config import config as backend_cfg
             self._db = BackendDatabase()
             ok = self._db.connect()
             if ok:
-                logger.info("✓ DB 연결 완료 (거래 로그 기록 활성화)")
+                logger.info(
+                    f"✓ DB 연결 완료 (거래 로그 활성화) "
+                    f"host={backend_cfg.MYSQL_HOST}:{backend_cfg.MYSQL_PORT} "
+                    f"db={backend_cfg.MYSQL_DATABASE}"
+                )
             else:
                 self._db = None
-                logger.warning("⚠️ DB 연결 실패 - 거래 로그 비활성화 (봇 계속 동작)")
+                logger.error(
+                    "✗ DB 연결 실패 - 거래 로그 비활성화! "
+                    f"(host={backend_cfg.MYSQL_HOST}:{backend_cfg.MYSQL_PORT} "
+                    f"db={backend_cfg.MYSQL_DATABASE}) "
+                    "일일 리포트에 거래가 나타나지 않습니다. "
+                    "MYSQL_URL 또는 DATABASE_URL 환경변수를 확인하세요."
+                )
         except Exception as e:
             self._db = None
-            logger.warning(f"⚠️ DB 모듈 로드 실패 - 거래 로그 비활성화: {e}")
+            logger.error(
+                f"✗ DB 모듈 로드/연결 실패 - 거래 로그 비활성화: {e} "
+                "일일 리포트에 거래가 나타나지 않습니다."
+            )
 
     def _log_trade_to_db(self, symbol: str, action: str, quantity: int,
                          price: float, pnl: float = None, order_id: str = None,
                          reason: str = None):
-        """DB에 거래 기록 (실패해도 무시)"""
+        """DB에 거래 기록 (실패해도 봇 동작 유지)"""
         if self._db is None:
+            logger.warning(
+                f"[DB 미연결] {action} {symbol} x{quantity} @ ${price:.2f} "
+                "거래 로그 기록 불가 - DB 연결을 확인하세요"
+            )
             return
         try:
-            self._db.log_trade(
+            row_id = self._db.log_trade(
                 symbol=symbol,
                 action=action,
                 quantity=quantity,
@@ -286,8 +304,12 @@ class AutoTradingBotV2:
                 strategy_id="auto_trading_bot_v2",
                 reason=reason,
             )
+            if row_id:
+                logger.debug(f"[DB] {action} {symbol} x{quantity} 로그 기록 (id={row_id})")
+            else:
+                logger.warning(f"[DB] {action} {symbol} 로그 기록 반환값 없음 (DB 연결 재확인 필요)")
         except Exception as e:
-            logger.warning(f"거래 로그 DB 저장 실패 (무시): {e}")
+            logger.error(f"[DB] {action} {symbol} 거래 로그 저장 실패: {e}")
 
     async def _on_price_spike(self, signal: dict):
         """

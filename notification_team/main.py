@@ -248,10 +248,42 @@ async def notify_portfolio_status(req: PortfolioStatusRequest) -> Dict[str, Any]
 
 # ── 리포트 엔드포인트 ─────────────────────────────────────────
 
+class DailyReportBody(BaseModel):
+    """백엔드에서 직접 전달하는 사전 계산 리포트"""
+    trade_date: Optional[str] = None
+    total_trades: Optional[int] = None
+    sell_trades: Optional[int] = None
+    winning_trades: Optional[int] = None
+    losing_trades: Optional[int] = None
+    realized_pnl: Optional[float] = None
+    ending_equity: float = 0.0
+
+
 @app.post("/report/daily")
-async def send_daily_report(ending_equity: float = 0.0) -> Dict[str, Any]:
-    """일일 리포트 즉시 발송"""
-    report = report_builder.build_daily_report(ending_equity=ending_equity)
+async def send_daily_report(body: Optional[DailyReportBody] = None) -> Dict[str, Any]:
+    """
+    일일 리포트 즉시 발송.
+    - body에 데이터가 있으면 그것을 우선 사용 (백엔드가 사전 계산한 값)
+    - 없으면 Alpaca API → DB 순으로 직접 조회
+    """
+    # 백엔드가 보낸 pre-computed 데이터가 있으면 우선 사용
+    if body and body.total_trades is not None:
+        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+        _today_et = _dt.now(_tz(_td(hours=-4))).strftime("%Y-%m-%d")
+        report = {
+            "trade_date": body.trade_date or _today_et,
+            "total_trades": body.total_trades,
+            "sell_trades": body.sell_trades if body.sell_trades is not None else body.total_trades,
+            "winning_trades": body.winning_trades or 0,
+            "losing_trades": body.losing_trades or 0,
+            "realized_pnl": body.realized_pnl or 0.0,
+            "ending_equity": body.ending_equity,
+            "source": "backend",
+        }
+    else:
+        ending_equity = body.ending_equity if body else 0.0
+        report = report_builder.build_daily_report(ending_equity=ending_equity)
+
     await notifier.notify_daily_report(report)
     return {"success": True, "report": report}
 

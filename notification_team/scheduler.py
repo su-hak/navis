@@ -83,6 +83,11 @@ async def job_daily_report():
     account = await _get_account_from_alpaca()
     ending_equity = float(account.get("equity", 0))
     report = report_builder.build_daily_report(ending_equity=ending_equity)
+    logger.info(
+        f"[리포트] 소스={report.get('source','?')} 총매도={report.get('sell_trades',0)}건 "
+        f"승={report.get('winning_trades',0)} 패={report.get('losing_trades',0)} "
+        f"PnL=${report['realized_pnl']:+,.2f}"
+    )
     await notifier.notify_daily_report(report)
     logger.info(f"✓ 일일 리포트 발송 완료 (PnL ${report['realized_pnl']:+,.2f})")
 

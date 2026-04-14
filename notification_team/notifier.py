@@ -120,18 +120,23 @@ class TelegramNotifier:
     async def notify_daily_report(self, report: Dict[str, Any]):
         """일일 리포트 전송"""
         trade_date = report.get("trade_date", _now_kst().strftime("%Y-%m-%d"))
-        total_trades = report.get("total_trades", 0)
+        # sell_trades: 매도 횟수 (winning+losing의 합계가 없을 때 표시용)
+        sell_trades = report.get("sell_trades", report.get("total_trades", 0))
         winning = report.get("winning_trades", 0)
         losing = report.get("losing_trades", 0)
         realized_pnl = report.get("realized_pnl", 0.0)
         ending_equity = report.get("ending_equity", 0.0)
+        source = report.get("source", "")
 
-        win_rate = (winning / total_trades * 100) if total_trades > 0 else 0
+        closed = winning + losing  # pnl이 기록된 완결 거래
+        win_rate = (winning / closed * 100) if closed > 0 else 0
         pnl_emoji = "📈" if realized_pnl >= 0 else "📉"
 
+        source_label = {"alpaca": " (Alpaca)", "db": " (DB)", "none": " (데이터 없음)"}.get(source, "")
+
         msg = (
-            f"📊 *일일 리포트 - {trade_date}*\n"
-            f"총 거래: {total_trades}회\n"
+            f"📊 *일일 리포트 - {trade_date}*{source_label}\n"
+            f"총 매도: {sell_trades}회\n"
             f"승: {winning} / 패: {losing} (승률 {win_rate:.0f}%)\n"
             f"실현 손익: {pnl_emoji} ${realized_pnl:+,.2f}\n"
             f"잔고: ${ending_equity:,.2f}"
