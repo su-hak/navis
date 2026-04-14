@@ -22,7 +22,11 @@
       "Bash(sudo apt-get update:*)",
       "Bash(sudo apt-get install:*)",
       "Bash(chmod:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(curl -s -X POST \"https://notificationteam-production.up.railway.app/report/daily\")",
+      "Bash(curl -s \"https://notificationteam-production.up.railway.app/report/history?limit=5\")",
+      "Bash(curl -s \"https://notificationteam-production.up.railway.app/report/daily\")",
+      "Bash(curl -s -X POST \"https://notificationteam-production.up.railway.app/report/daily\" -H \"Content-Type: application/json\")"
     ]
   }
 }

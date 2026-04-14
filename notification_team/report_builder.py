@@ -36,22 +36,27 @@ def _alpaca_headers() -> dict:
 
 def _get_today_pnl_from_alpaca(client: httpx.Client) -> float:
     """
-    Alpaca portfolio/history 로 당일 실현+미실현 손익 조회.
+    Alpaca account 에서 오늘 미실현+실현 손익 합산.
+    unrealized_pl (현재 보유 포지션 미실현) +
+    오늘 realized_pl 변화분(= 현재 realized_pl - 전날 종가 기준 realized_pl)
+    → 단순하게 account.equity - account.last_equity 로 대체
     실패 시 0.0 반환.
     """
     try:
         resp = client.get(
-            f"{config.ALPACA_BASE_URL}/v2/account/portfolio/history",
+            f"{config.ALPACA_BASE_URL}/v2/account",
             headers=_alpaca_headers(),
-            params={"period": "1D", "timeframe": "1D", "extended_hours": "true"},
         )
         resp.raise_for_status()
         data = resp.json()
-        pnl_list = data.get("profit_loss") or []
-        if pnl_list:
-            return float(pnl_list[-1] or 0)
+        # equity: 현재 총 자산
+        # last_equity: 전날 종가 기준 총 자산
+        equity = float(data.get("equity") or 0)
+        last_equity = float(data.get("last_equity") or 0)
+        if last_equity > 0:
+            return equity - last_equity
     except Exception as e:
-        logger.warning(f"Alpaca portfolio/history 조회 실패: {e}")
+        logger.warning(f"Alpaca account 손익 조회 실패: {e}")
     return 0.0
 
 
