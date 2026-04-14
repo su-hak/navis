@@ -55,6 +55,9 @@ uvicorn[standard]>=0.27.0
 # Utilities
 coloredlogs>=15.0.1
 
+# Database
+mysql-connector-python>=8.3.0
+
 # Broker APIs (for Execution Team)
 alpaca-trade-api>=3.1.0        # Alpaca Trading API (legacy SDK - execution_team)
 alpaca-py>=0.20.2              # Alpaca SDK (new - data_collection/monitoring)

@@ -159,8 +159,8 @@ class AutoTradingBotV2:
         self.trade_count = 0
         self.is_running = False
 
-        # DB 연결 (거래 로그 기록용)
-        self._db = None
+        # DB 연결 설정 (거래 로그 기록용)
+        self._db_cfg = None
         self._init_database()
 
         logger.info("✓ 자동매매 봇 V2 초기화 완료")
@@ -255,59 +255,85 @@ class AutoTradingBotV2:
             raise
 
     def _init_database(self):
-        """DB 연결 초기화 (거래 로그 기록용, 실패해도 봇은 계속 동작)"""
+        """
+        DB 연결 초기화 - backend 패키지 없이 mysql.connector 직접 사용.
+        환경변수: MYSQL_URL(또는 DATABASE_URL) 또는 MYSQL_HOST/PORT/USER/PASSWORD/DATABASE
+        """
         try:
-            from backend.database import BackendDatabase
-            from backend.config import config as backend_cfg
-            self._db = BackendDatabase()
-            ok = self._db.connect()
-            if ok:
-                logger.info(
-                    f"✓ DB 연결 완료 (거래 로그 활성화) "
-                    f"host={backend_cfg.MYSQL_HOST}:{backend_cfg.MYSQL_PORT} "
-                    f"db={backend_cfg.MYSQL_DATABASE}"
-                )
+            import mysql.connector
+            from urllib.parse import urlparse
+
+            db_url = os.getenv("MYSQL_URL") or os.getenv("DATABASE_URL")
+            if db_url and "mysql" in db_url:
+                for prefix in ("mysql2://", "mysql+pymysql://", "mariadb://"):
+                    if db_url.startswith(prefix):
+                        db_url = "mysql://" + db_url[len(prefix):]
+                        break
+                p = urlparse(db_url)
+                host = p.hostname or "localhost"
+                port = p.port or 3306
+                user = p.username or "root"
+                password = p.password or ""
+                database = p.path[1:] if p.path else "trading_db"
             else:
-                self._db = None
-                logger.error(
-                    "✗ DB 연결 실패 - 거래 로그 비활성화! "
-                    f"(host={backend_cfg.MYSQL_HOST}:{backend_cfg.MYSQL_PORT} "
-                    f"db={backend_cfg.MYSQL_DATABASE}) "
-                    "일일 리포트에 거래가 나타나지 않습니다. "
-                    "MYSQL_URL 또는 DATABASE_URL 환경변수를 확인하세요."
-                )
+                host     = os.getenv("MYSQL_HOST", "localhost")
+                port     = int(os.getenv("MYSQL_PORT", "3306"))
+                user     = os.getenv("MYSQL_USER", "root")
+                password = os.getenv("MYSQL_PASSWORD", "")
+                database = os.getenv("MYSQL_DATABASE", "trading_db")
+
+            conn = mysql.connector.connect(
+                host=host, port=port, user=user,
+                password=password, database=database,
+                charset="utf8mb4", autocommit=False,
+            )
+            conn.close()  # 연결 테스트만
+
+            self._db_cfg = {
+                "host": host, "port": port, "user": user,
+                "password": password, "database": database,
+            }
+            logger.info(f"✓ DB 연결 확인 완료: {host}:{port}/{database}")
+
         except Exception as e:
-            self._db = None
+            self._db_cfg = None
             logger.error(
-                f"✗ DB 모듈 로드/연결 실패 - 거래 로그 비활성화: {e} "
-                "일일 리포트에 거래가 나타나지 않습니다."
+                f"✗ DB 연결 실패 - 거래 로그 비활성화: {e}\n"
+                "  → MYSQL_URL 또는 DATABASE_URL 환경변수를 확인하세요.\n"
+                "  → 일일 리포트에 거래가 표시되지 않습니다."
             )
 
     def _log_trade_to_db(self, symbol: str, action: str, quantity: int,
                          price: float, pnl: float = None, order_id: str = None,
                          reason: str = None):
         """DB에 거래 기록 (실패해도 봇 동작 유지)"""
-        if self._db is None:
-            logger.warning(
-                f"[DB 미연결] {action} {symbol} x{quantity} @ ${price:.2f} "
-                "거래 로그 기록 불가 - DB 연결을 확인하세요"
-            )
+        if self._db_cfg is None:
             return
         try:
-            row_id = self._db.log_trade(
-                symbol=symbol,
-                action=action,
-                quantity=quantity,
-                price=price,
-                order_id=order_id,
-                pnl=pnl,
-                strategy_id="auto_trading_bot_v2",
-                reason=reason,
-            )
-            if row_id:
-                logger.debug(f"[DB] {action} {symbol} x{quantity} 로그 기록 (id={row_id})")
-            else:
-                logger.warning(f"[DB] {action} {symbol} 로그 기록 반환값 없음 (DB 연결 재확인 필요)")
+            import mysql.connector
+            conn = mysql.connector.connect(**self._db_cfg, autocommit=False)
+            cursor = conn.cursor()
+            sql = """
+                INSERT INTO trading_logs
+                    (symbol, action, quantity, price, amount,
+                     order_id, status, pnl, strategy_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            action_upper = action.upper()
+            valid_actions = ("BUY", "SELL", "STOP_LOSS", "TAKE_PROFIT")
+            if action_upper not in valid_actions:
+                action_upper = "SELL"
+            cursor.execute(sql, (
+                symbol, action_upper, quantity, price,
+                quantity * price,
+                order_id, "FILLED", pnl,
+                "auto_trading_bot_v2",
+            ))
+            conn.commit()
+            row_id = cursor.lastrowid
+            cursor.close()
+            conn.close()
+            logger.debug(f"[DB] {action_upper} {symbol} x{quantity} 기록 완료 (id={row_id})")
         except Exception as e:
             logger.error(f"[DB] {action} {symbol} 거래 로그 저장 실패: {e}")
 
