@@ -13,7 +13,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from .config import config
 from .notifier import notifier
-from .report_builder import report_builder
+from .report_builder import report_builder, get_tp_analysis_from_alpaca
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,27 @@ async def job_daily_report():
         f"승={report.get('winning_trades',0)} 패={report.get('losing_trades',0)} "
         f"PnL=${report['realized_pnl']:+,.2f}"
     )
-    await notifier.notify_daily_report(report)
+
+    # ── TP 수준별 도달 가능 승률 분석 (학습 데이터 저장) ──────
+    trade_date = report.get("trade_date", "")
+    tp_analysis = None
+    if trade_date:
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            tp_analysis = await loop.run_in_executor(
+                None, get_tp_analysis_from_alpaca, trade_date
+            )
+            if tp_analysis:
+                if report_builder.db.is_connected:
+                    report_builder.db.save_tp_analysis(trade_date, tp_analysis)
+                    logger.info(f"[TP분석] DB 저장 완료: {trade_date}")
+                else:
+                    logger.warning("[TP분석] DB 미연결 - 저장 생략")
+        except Exception as e:
+            logger.warning(f"[TP분석] 실패: {e}")
+
+    await notifier.notify_daily_report(report, tp_analysis=tp_analysis)
     logger.info(f"✓ 일일 리포트 발송 완료 (PnL ${report['realized_pnl']:+,.2f})")
 
 

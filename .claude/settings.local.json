@@ -26,7 +26,10 @@
       "Bash(curl -s -X POST \"https://notificationteam-production.up.railway.app/report/daily\")",
       "Bash(curl -s \"https://notificationteam-production.up.railway.app/report/history?limit=5\")",
       "Bash(curl -s \"https://notificationteam-production.up.railway.app/report/daily\")",
-      "Bash(curl -s -X POST \"https://notificationteam-production.up.railway.app/report/daily\" -H \"Content-Type: application/json\")"
+      "Bash(curl -s -X POST \"https://notificationteam-production.up.railway.app/report/daily\" -H \"Content-Type: application/json\")",
+      "Bash(pip3 show:*)",
+      "Bash(/mnt/c/navis/venv/bin/python3:*)",
+      "Bash(/mnt/c/navis/venv/Scripts/python.exe:*)"
     ]
   }
 }

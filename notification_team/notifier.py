@@ -117,10 +117,13 @@ class TelegramNotifier:
 
     # ── 리포트 알림 ─────────────────────────────────────────
 
-    async def notify_daily_report(self, report: Dict[str, Any]):
+    async def notify_daily_report(
+        self,
+        report: Dict[str, Any],
+        tp_analysis: Optional[List[Dict[str, Any]]] = None,
+    ):
         """일일 리포트 전송"""
         trade_date = report.get("trade_date", _now_kst().strftime("%Y-%m-%d"))
-        # sell_trades: 매도 횟수 (winning+losing의 합계가 없을 때 표시용)
         sell_trades = report.get("sell_trades", report.get("total_trades", 0))
         winning = report.get("winning_trades", 0)
         losing = report.get("losing_trades", 0)
@@ -128,7 +131,7 @@ class TelegramNotifier:
         ending_equity = report.get("ending_equity", 0.0)
         source = report.get("source", "")
 
-        closed = winning + losing  # pnl이 기록된 완결 거래
+        closed = winning + losing
         win_rate = (winning / closed * 100) if closed > 0 else 0
         pnl_emoji = "📈" if realized_pnl >= 0 else "📉"
 
@@ -141,6 +144,17 @@ class TelegramNotifier:
             f"실현 손익: {pnl_emoji} ${realized_pnl:+,.2f}\n"
             f"잔고: ${ending_equity:,.2f}"
         )
+
+        if tp_analysis:
+            total = tp_analysis[0]["total"] if tp_analysis else 0
+            lines = ["\n📈 *익절 수준별 도달 가능 승률*"]
+            for r in tp_analysis:
+                cnt  = r["reachable"]
+                rate = r["win_rate"]
+                bar  = "●" * cnt + "○" * (total - cnt)
+                lines.append(f"TP {r['tp_pct']:2d}%: {cnt}/{total} ({rate:.0f}%) {bar}")
+            msg += "\n".join(lines)
+
         await self.send(msg)
 
     async def notify_weekly_report(self, weekly_data: List[Dict[str, Any]]):
