@@ -995,8 +995,15 @@ class AutoTradingBotV2:
                 watchlist = await self.watchlist_generator.generate_watchlist()
 
                 if watchlist:
-                    # AI 뉴스 감성 스코어링 (선택적)
-                    watchlist = await self._apply_ai_scoring(watchlist)
+                    # 포지션 여유가 있을 때만 AI 뉴스 감성 스코어링 실행 (비용 절감)
+                    positions = self.execution_engine.get_positions()
+                    if len(positions) < self.max_positions:
+                        watchlist = await self._apply_ai_scoring(watchlist)
+                    else:
+                        logger.info(
+                            f"최대 포지션 도달 ({len(positions)}/{self.max_positions}) "
+                            f"- AI 스코어링 생략 (신규 매수 불가)"
+                        )
 
                     logger.info(f"\n워치리스트 갱신:")
                     for i, stock in enumerate(watchlist[:10], 1):
