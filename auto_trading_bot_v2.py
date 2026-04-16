@@ -556,13 +556,22 @@ class AutoTradingBotV2:
         if not watchlist or not self.news_analyzer:
             return watchlist
 
-        logger.info(f"AI 뉴스 감성 분석 중 ({len(watchlist)}개 종목)...")
+        # 비용 절감: 상위 N개만 AI 분석 (한 번에 살 수 있는 종목은 1개)
+        # 나머지는 gap/volume 점수 그대로 워치리스트에 유지
+        MAX_AI_ANALYZE = int(os.getenv("MAX_AI_ANALYZE", "5"))
+        tail = watchlist[MAX_AI_ANALYZE:]  # AI 분석 생략 종목
+        candidates = watchlist[:MAX_AI_ANALYZE]
+
+        logger.info(
+            f"AI 뉴스 감성 분석 중 ({len(candidates)}개 종목, "
+            f"상위 {MAX_AI_ANALYZE}개만 분석 / 전체 {len(watchlist)}개)..."
+        )
 
         AI_BLOCK_THRESHOLD = -0.3  # 이 점수 미만이면 매수 차단
 
         loop = asyncio.get_event_loop()
         approved = []
-        for stock in watchlist:
+        for stock in candidates:
             symbol = stock['symbol']
             try:
                 sentiment = await asyncio.wait_for(
@@ -599,14 +608,18 @@ class AutoTradingBotV2:
                 logger.debug(f"{symbol}: AI 분석 오류 - {e} (원본 점수 유지, 통과)")
                 approved.append(stock)
 
-        removed = len(watchlist) - len(approved)
+        removed = len(candidates) - len(approved)
         if removed:
             logger.info(f"AI 감성 필터: {removed}개 종목 제거됨")
 
-        # AI 보정된 score로 재정렬
+        # AI 보정된 score로 재정렬 후, 분석 생략 종목을 뒤에 붙임
         approved.sort(key=lambda x: x['score'], reverse=True)
-        logger.info(f"AI 감성 분석 완료: {len(approved)}개 종목 통과, 워치리스트 재정렬됨")
-        return approved
+        result = approved + tail
+        logger.info(
+            f"AI 감성 분석 완료: {len(approved)}개 통과 + {len(tail)}개 미분석 = "
+            f"총 {len(result)}개 워치리스트"
+        )
+        return result
 
     def check_risk_limits(self) -> bool:
         """
