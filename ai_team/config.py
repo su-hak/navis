@@ -12,7 +12,7 @@ class AITeamConfig(BaseSettings):
 
     # Anthropic Claude API 설정 (뉴스 분석, AI Agent에 사용)
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
-    anthropic_model: str = "claude-3-5-sonnet-20241022"
+    anthropic_model: str = "claude-haiku-4-5-20251001"
     anthropic_temperature: float = 0.3
 
     # OpenAI API 설정 (RAG 임베딩에만 사용, 선택적)

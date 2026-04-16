@@ -153,6 +153,7 @@ class AutoTradingBotV2:
         self.trade_cooldown_minutes = int(os.getenv('TRADE_COOLDOWN_MINUTES', '120'))  # 기본 2시간
         self._recently_sold: Dict[str, datetime] = {}  # {symbol: 매도 완료 시각}
         self._pending_sell_symbols: set = set()  # 미체결 매도 주문 있는 종목 (중복 주문 방지)
+        self._pending_buy_symbols: set = set()  # 매수 주문 처리 중인 종목 (중복 매수 방지)
 
         # 상태 추적
         self.daily_pl = 0.0
@@ -390,6 +391,26 @@ class AutoTradingBotV2:
         """
         symbol = signal['symbol']
 
+        # 매수 주문 처리 중 중복 방지
+        if symbol in self._pending_buy_symbols:
+            logger.info(f"{symbol} 매수 주문 처리 중 - 중복 신호 무시")
+            return
+        self._pending_buy_symbols.add(symbol)
+
+        try:
+            await self._execute_buy_signal_inner(signal)
+        finally:
+            self._pending_buy_symbols.discard(symbol)
+
+    async def _execute_buy_signal_inner(self, signal: dict):
+        """매수 신호 실행 (내부)"""
+        symbol = signal['symbol']
+
+        # 거래 가능 시간 체크 (장중 또는 프리/애프터마켓만 허용)
+        if not self._is_market_hours() and not self._is_extended_hours():
+            logger.info(f"{symbol} 매수 신호 무시 - 거래 불가 시간 (ET 기준 장외시간)")
+            return
+
         # 포지션 수 확인
         positions = self.execution_engine.get_positions()
         if len(positions) >= self.max_positions:
@@ -423,17 +444,34 @@ class AutoTradingBotV2:
             logger.warning(f"투자 금액 부족: ${investment_amount:.2f} < ${signal['current_price']:.2f}")
             return
 
-        # 주문 생성
-        order_signal = OrderSignal(
-            symbol=symbol,
-            action=OrderAction.BUY,
-            order_type=OrderType.MARKET,
-            quantity=quantity,
-            strategy_id="high_freq_monitor_v2",
-            reason=signal['reason']
-        )
+        # 주문 생성 (장중: 시장가 / 장외: 지정가 + extended_hours)
+        is_market = self._is_market_hours()
+        if is_market:
+            order_signal = OrderSignal(
+                symbol=symbol,
+                action=OrderAction.BUY,
+                order_type=OrderType.MARKET,
+                quantity=quantity,
+                strategy_id="high_freq_monitor_v2",
+                reason=signal['reason']
+            )
+            session_label = "장중(시장가)"
+        else:
+            # 장외: 현재가 기준 +0.5% 슬리피지 허용 지정가
+            limit_price = round(signal['current_price'] * 1.005, 2)
+            order_signal = OrderSignal(
+                symbol=symbol,
+                action=OrderAction.BUY,
+                order_type=OrderType.LIMIT,
+                quantity=quantity,
+                limit_price=limit_price,
+                extended_hours=True,
+                strategy_id="high_freq_monitor_v2",
+                reason=signal['reason']
+            )
+            session_label = f"장외(지정가 ${limit_price:.2f})"
 
-        logger.info(f"\n매수 주문 실행:")
+        logger.info(f"\n매수 주문 실행 [{session_label}]:")
         logger.info(f"  종목: {symbol}")
         logger.info(f"  수량: {quantity}주")
         logger.info(f"  예상 투자금: ${investment_amount:.2f}")
@@ -442,23 +480,32 @@ class AutoTradingBotV2:
         # 주문 실행
         result = self.execution_engine.execute_order(order_signal)
 
+        from execution_team.core.order_models import OrderStatus as _OS
         if result.success:
-            logger.info(f"✓ 매수 성공!")
-            logger.info(f"  주문 ID: {result.order_id}")
-            logger.info(f"  체결가: ${result.filled_price:.2f}" if result.filled_price is not None else "  체결가: (미체결)")
-            logger.info(f"  체결 수량: {result.filled_quantity}주")
-            self.trade_count += 1
-            filled_price = result.filled_price or signal['current_price']
-            filled_qty = result.filled_quantity or quantity
-            self._log_trade_to_db(
-                symbol=symbol, action="BUY",
-                quantity=filled_qty, price=filled_price,
-                order_id=result.order_id, reason=signal.get('reason'),
-            )
-            self._send_telegram_notify("buy", symbol=symbol,
-                                       filled_price=filled_price,
-                                       quantity=filled_qty,
-                                       reason=signal.get('reason'))
+            filled_price = result.filled_price
+            filled_qty = result.filled_quantity or 0
+            is_filled = (result.status == _OS.FILLED and filled_qty > 0)
+
+            if is_filled:
+                logger.info(f"✓ 매수 체결 완료!")
+                logger.info(f"  주문 ID: {result.order_id}")
+                logger.info(f"  체결가: ${filled_price:.2f}")
+                logger.info(f"  체결 수량: {filled_qty}주")
+                self.trade_count += 1
+                self._log_trade_to_db(
+                    symbol=symbol, action="BUY",
+                    quantity=filled_qty, price=filled_price,
+                    order_id=result.order_id, reason=signal.get('reason'),
+                )
+                self._send_telegram_notify("buy", symbol=symbol,
+                                           filled_price=filled_price,
+                                           quantity=filled_qty,
+                                           reason=signal.get('reason'))
+            else:
+                logger.info(f"✓ 매수 주문 접수 (미체결 대기)")
+                logger.info(f"  주문 ID: {result.order_id}")
+                logger.info(f"  상태: {result.status}")
+                # 체결 알림 없음 - 실제로 체결되지 않았으므로
         else:
             logger.error(f"✗ 매수 실패: {result.error_message}")
             self._send_telegram_notify("error", context=f"매수 실패 ({symbol})",
