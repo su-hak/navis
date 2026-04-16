@@ -196,7 +196,8 @@ class HighFrequencyMonitor:
                 # 알림 카운트 증가
                 stock.alert_count += 1
 
-            # 상태 업데이트
+            # 상태 업데이트 (prev_price를 현재가로 갱신하여 다음 루프에서 중복 감지 방지)
+            stock.prev_price = current_price
             stock.current_price = current_price
             stock.last_check_time = datetime.now()
 
