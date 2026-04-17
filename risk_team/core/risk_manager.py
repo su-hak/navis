@@ -77,6 +77,7 @@ class RiskManager:
         account: AccountInfo,
         positions: List[Position],
         current_price: float,
+        atr: float = None,
     ) -> RiskDecision:
         """
         주문 허용 여부 판단 (메인 함수)
@@ -192,17 +193,36 @@ class RiskManager:
                     f"수량 조정 - 신호: {signal.quantity}주 → 리스크 계산: {quantity}주"
                 )
 
-            # ── 9. 손절/익절가 계산 ──────────────────────────
-            stop_loss, take_profit = self.calculate_stops(current_price, "BUY")
+            # ── 9. 손절/익절가 계산 (ATR 기반 또는 고정%) ───────
+            stop_loss, take_profit = self.calculate_stops(current_price, "BUY", atr=atr)
 
-            # ── 10. 남은 손실 예산 경고 ──────────────────────
+            # ── 10. Daily Loss 여력 대비 포지션 사이징 검증 (CRIT-01) ──
             remaining_budget = self.daily_tracker.get_remaining_loss_budget()
             max_loss_this_trade = invest_amount * self.stop_loss_pct
             if max_loss_this_trade > remaining_budget * 0.5:
-                warnings.append(
-                    f"이번 거래 최대 손실(${max_loss_this_trade:.2f})이 "
-                    f"남은 일일 예산(${remaining_budget:.2f})의 50% 초과"
-                )
+                # 여력의 50% 이하로 수량 강제 조정
+                max_allowed_invest = (remaining_budget * 0.5) / self.stop_loss_pct
+                if max_allowed_invest < current_price:
+                    return RiskDecision(
+                        action=RiskAction.REJECT,
+                        allowed=False,
+                        reason=(
+                            f"일일 손실 여력 부족 - 이 거래 최대 손실 ${max_loss_this_trade:.2f}이 "
+                            f"남은 예산(${remaining_budget:.2f})의 50% 초과. "
+                            f"투자 가능 금액: ${max_allowed_invest:.2f}"
+                        ),
+                    )
+                adjusted_qty = int(max_allowed_invest / current_price)
+                if adjusted_qty < quantity:
+                    quantity = adjusted_qty
+                    invest_amount = quantity * current_price
+                    invest_pct = invest_amount / account.equity
+                    action = RiskAction.ADJUST
+                    warnings.append(
+                        f"일일 손실 여력 초과로 수량 조정: {quantity}주 "
+                        f"(최대 손실 ${invest_amount * self.stop_loss_pct:.2f} ≤ "
+                        f"잔여 예산의 50% ${remaining_budget * 0.5:.2f})"
+                    )
 
             return RiskDecision(
                 action=action,
@@ -250,32 +270,80 @@ class RiskManager:
 
     # ============ 손절/익절 계산 ============
 
-    def calculate_stops(
-        self, entry_price: float, action: str = "BUY"
-    ) -> Tuple[float, float]:
+    @staticmethod
+    def calculate_atr(high_prices: list, low_prices: list, close_prices: list, period: int = 14) -> float:
         """
-        손절가 / 익절가 계산
-
-        기획서: 손절 -2%, Risk:Reward = 1:3 → 익절 +6%
+        ATR(Average True Range) 계산 - CRIT-03
 
         Args:
-            entry_price: 진입가 (현재가 또는 체결가)
+            high_prices: 고가 리스트 (최소 period+1개)
+            low_prices:  저가 리스트
+            close_prices: 종가 리스트
+            period: ATR 기간 (기본 14일)
+
+        Returns:
+            ATR 값 (가격 단위)
+        """
+        if len(close_prices) < period + 1:
+            return 0.0
+
+        true_ranges = []
+        for i in range(1, len(close_prices)):
+            hl = high_prices[i] - low_prices[i]
+            hc = abs(high_prices[i] - close_prices[i - 1])
+            lc = abs(low_prices[i] - close_prices[i - 1])
+            true_ranges.append(max(hl, hc, lc))
+
+        # 마지막 period개의 TR 평균
+        return sum(true_ranges[-period:]) / period
+
+    def calculate_stops(
+        self,
+        entry_price: float,
+        action: str = "BUY",
+        atr: float = None,
+        atr_sl_multiplier: float = 1.5,
+        atr_tp_multiplier: float = 3.0,
+    ) -> Tuple[float, float]:
+        """
+        손절가 / 익절가 계산 - CRIT-03: ATR 기반 동적 SL
+
+        atr이 제공되면 ATR×multiplier 방식으로 계산하여
+        변동성에 맞는 동적 SL/TP를 적용합니다.
+        atr이 없으면 고정 % 방식으로 fallback.
+
+        Args:
+            entry_price: 진입가
             action: "BUY" 또는 "SELL"
+            atr: ATR(14일) 값. None이면 고정 % 사용
+            atr_sl_multiplier: SL에 곱할 ATR 배수 (기본 1.5)
+            atr_tp_multiplier: TP에 곱할 ATR 배수 (기본 3.0, 최소 2:1 R:R 보장)
 
         Returns:
             (stop_loss_price, take_profit_price)
         """
-        if action == "BUY":
-            stop_loss = entry_price * (1 - self.stop_loss_pct)
-            take_profit = entry_price * (1 + self.take_profit_pct)
-        else:  # SHORT
-            stop_loss = entry_price * (1 + self.stop_loss_pct)
-            take_profit = entry_price * (1 - self.take_profit_pct)
-
-        logger.debug(
-            f"손절/익절 계산 - 진입: ${entry_price:.2f}, "
-            f"손절: ${stop_loss:.2f}, 익절: ${take_profit:.2f}"
-        )
+        if atr and atr > 0:
+            if action == "BUY":
+                stop_loss = entry_price - (atr_sl_multiplier * atr)
+                take_profit = entry_price + (atr_tp_multiplier * atr)
+            else:
+                stop_loss = entry_price + (atr_sl_multiplier * atr)
+                take_profit = entry_price - (atr_tp_multiplier * atr)
+            logger.debug(
+                f"ATR 기반 손절/익절 - 진입: ${entry_price:.2f}, ATR: ${atr:.4f}, "
+                f"손절: ${stop_loss:.2f}, 익절: ${take_profit:.2f}"
+            )
+        else:
+            if action == "BUY":
+                stop_loss = entry_price * (1 - self.stop_loss_pct)
+                take_profit = entry_price * (1 + self.take_profit_pct)
+            else:
+                stop_loss = entry_price * (1 + self.stop_loss_pct)
+                take_profit = entry_price * (1 - self.take_profit_pct)
+            logger.debug(
+                f"고정% 손절/익절 - 진입: ${entry_price:.2f}, "
+                f"손절: ${stop_loss:.2f}, 익절: ${take_profit:.2f}"
+            )
 
         return stop_loss, take_profit
 

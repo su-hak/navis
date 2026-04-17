@@ -60,11 +60,28 @@ except ImportError as e:
 # 감시 시스템 임포트
 try:
     from data_collection.monitoring import WatchlistGenerator, HighFrequencyMonitor
+    from data_collection.monitoring.websocket_monitor import WebSocketPriceMonitor
 except ImportError as e:
     logger.error(f"Monitoring 모듈 임포트 실패: {e}")
     import traceback
     traceback.print_exc()
     sys.exit(1)
+
+# 시장 게이트 (선택적 - 실패해도 봇은 계속 동작)
+try:
+    from strategy_engine.market_gate import MarketGate
+    MARKET_GATE_AVAILABLE = True
+except Exception as _e:
+    MARKET_GATE_AVAILABLE = False
+    logger.warning(f"MarketGate 비활성화: {_e}")
+
+# 갭 방향 검증기 (선택적)
+try:
+    from strategy_engine.filters.gap_validator import GapValidator
+    GAP_VALIDATOR_AVAILABLE = True
+except Exception as _e:
+    GAP_VALIDATOR_AVAILABLE = False
+    logger.warning(f"GapValidator 비활성화: {_e}")
 
 # AI 뉴스 분석기 (선택적 - 실패해도 봇은 계속 동작)
 try:
@@ -155,6 +172,19 @@ class AutoTradingBotV2:
         self._pending_sell_symbols: set = set()  # 미체결 매도 주문 있는 종목 (중복 주문 방지)
         self._pending_buy_symbols: set = set()  # 매수 주문 처리 중인 종목 (중복 매수 방지)
 
+        # IMP-03: Trailing Stop 설정
+        self.trailing_stop_pct = float(os.getenv('TRAILING_STOP_PCT', '2.0'))        # 최고가 대비 -2% 청산
+        self.partial_take_profit_pct = float(os.getenv('PARTIAL_TP_PCT', '3.0'))     # +3%에 50% 부분 청산
+        self._highest_price: Dict[str, float] = {}   # {symbol: 진입 후 최고가}
+        self._partial_tp_done: set = set()            # 부분 청산 완료 종목
+
+        # NEW-04: 일일 거래 횟수 제한
+        self.max_entries_per_day = int(os.getenv('MAX_ENTRIES_PER_DAY', '5'))
+        self.max_exits_per_day = int(os.getenv('MAX_EXITS_PER_DAY', '10'))
+        self._daily_entry_count = 0
+        self._daily_exit_count = 0
+        self._last_trade_date: Optional[str] = None
+
         # 상태 추적
         self.daily_pl = 0.0
         self.trade_count = 0
@@ -230,6 +260,34 @@ class AutoTradingBotV2:
             )
             logger.info("✓ 워치리스트 생성기 초기화 완료")
 
+            # 갭 방향 검증기 (IMP-02)
+            if GAP_VALIDATOR_AVAILABLE:
+                try:
+                    self.gap_validator = GapValidator(
+                        api_key=self.api_key,
+                        api_secret=self.api_secret,
+                    )
+                    logger.info("✓ 갭 방향 검증기 초기화 완료")
+                except Exception as e:
+                    self.gap_validator = None
+                    logger.warning(f"갭 방향 검증기 초기화 실패 (무시): {e}")
+            else:
+                self.gap_validator = None
+
+            # 시장 게이트 (IMP-01)
+            if MARKET_GATE_AVAILABLE:
+                try:
+                    self.market_gate = MarketGate(
+                        api_key=self.api_key,
+                        api_secret=self.api_secret,
+                    )
+                    logger.info("✓ 시장 게이트(VIX/SPY) 초기화 완료")
+                except Exception as e:
+                    self.market_gate = None
+                    logger.warning(f"시장 게이트 초기화 실패 (무시): {e}")
+            else:
+                self.market_gate = None
+
             # AI 뉴스 분석기 (선택적)
             if AI_SCORING_AVAILABLE:
                 try:
@@ -250,6 +308,21 @@ class AutoTradingBotV2:
                 callback=self._on_price_spike  # 신호 발생 시 콜백
             )
             logger.info("✓ 고주기 모니터 초기화 완료")
+
+            # NEW-02: WebSocket 실시간 SL/TP 모니터 (폴백: 30초 폴링)
+            try:
+                self.ws_monitor = WebSocketPriceMonitor(
+                    api_key=self.api_key,
+                    api_secret=self.api_secret,
+                    on_sl_hit=self._on_ws_sl_hit,
+                    stop_loss_pct=self.stop_loss_percent,
+                    trailing_stop_pct=self.trailing_stop_pct,
+                    partial_tp_pct=self.partial_take_profit_pct,
+                )
+                logger.info("✓ WebSocket 실시간 SL/TP 모니터 초기화 완료")
+            except Exception as e:
+                self.ws_monitor = None
+                logger.warning(f"WebSocket 모니터 초기화 실패 (폴링 폴백): {e}")
 
         except Exception as e:
             logger.error(f"✗ Monitoring System 초기화 실패: {e}")
@@ -402,9 +475,27 @@ class AutoTradingBotV2:
         finally:
             self._pending_buy_symbols.discard(symbol)
 
+    def _reset_daily_counts_if_needed(self):
+        """날짜 변경 시 일일 거래 카운터 초기화"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        if self._last_trade_date != today:
+            self._daily_entry_count = 0
+            self._daily_exit_count = 0
+            self._last_trade_date = today
+            logger.info(f"[NEW-04] 일일 거래 카운터 초기화 ({today})")
+
     async def _execute_buy_signal_inner(self, signal: dict):
         """매수 신호 실행 (내부)"""
         symbol = signal['symbol']
+
+        # NEW-04: 날짜 초기화 및 일일 진입 횟수 체크
+        self._reset_daily_counts_if_needed()
+        if self._daily_entry_count >= self.max_entries_per_day:
+            logger.info(
+                f"{symbol} 매수 신호 무시 - 일일 최대 진입 횟수 도달 "
+                f"({self._daily_entry_count}/{self.max_entries_per_day})"
+            )
+            return
 
         # 거래 가능 시간 체크 (장중 또는 프리/애프터마켓만 허용)
         if not self._is_market_hours() and not self._is_extended_hours():
@@ -421,6 +512,17 @@ class AutoTradingBotV2:
         if any(p.symbol == symbol for p in positions):
             logger.info(f"{symbol} 이미 보유 중 - 중복 매수 방지")
             return
+
+        # ── IMP-02: Gap & Go vs Gap & Fade 방향 검증 ──────────
+        gap_pct = signal.get('change_percent', signal.get('gap_pct', 0.0))
+        if self.gap_validator and self._is_market_hours() and gap_pct != 0:
+            loop = asyncio.get_event_loop()
+            is_gap_go = await loop.run_in_executor(
+                None, self.gap_validator.validate_gap_direction, symbol, gap_pct
+            )
+            if not is_gap_go:
+                logger.info(f"{symbol} Gap & Fade 감지 - 진입 거부")
+                return
 
         # 쿨다운 체크 (최근 매도 종목 재진입 방지)
         if symbol in self._recently_sold:
@@ -492,6 +594,10 @@ class AutoTradingBotV2:
                 logger.info(f"  체결가: ${filled_price:.2f}")
                 logger.info(f"  체결 수량: {filled_qty}주")
                 self.trade_count += 1
+                self._daily_entry_count += 1
+                # IMP-03: 최고가 초기화 (trailing stop 기준점)
+                self._highest_price[symbol] = filled_price
+                self._partial_tp_done.discard(symbol)
                 self._log_trade_to_db(
                     symbol=symbol, action="BUY",
                     quantity=filled_qty, price=filled_price,
@@ -574,11 +680,14 @@ class AutoTradingBotV2:
         for stock in candidates:
             symbol = stock['symbol']
             try:
+                # NEW-03: 갭 감지 시각을 gap_time으로 전달 (타이밍 필터)
+                gap_time = stock.get('detected_at', datetime.now())
                 sentiment = await asyncio.wait_for(
                     loop.run_in_executor(
                         None,
                         self.news_analyzer.analyze_news_sentiment,
-                        symbol
+                        symbol,
+                        gap_time,
                     ),
                     timeout=10.0
                 )
@@ -815,25 +924,79 @@ class AutoTradingBotV2:
                 for position in positions:
                     try:
                         pl_pct = float(position.unrealized_plpc) * 100.0
+                        current_price = float(getattr(position, 'current_price', 0) or 0)
                     except (AttributeError, TypeError, ValueError):
                         continue
 
                     symbol = position.symbol
                     qty = int(float(position.qty))
+                    sell_type = None
 
+                    # ── 손절 체크 (고정 SL) ───────────────────────────────
                     if pl_pct < -self.stop_loss_percent:
                         sell_type = "STOP_LOSS"
                         logger.warning(
                             f"[손절] {symbol}: {pl_pct:.2f}% "
-                            f"(기준: -{self.stop_loss_percent}%) → 매도 주문 제출"
+                            f"(기준: -{self.stop_loss_percent}%) → 매도"
                         )
-                    elif pl_pct > self.take_profit_percent:
-                        sell_type = "TAKE_PROFIT"
-                        logger.warning(
-                            f"[익절] {symbol}: {pl_pct:.2f}% "
-                            f"(기준: +{self.take_profit_percent}%) → 매도 주문 제출"
-                        )
-                    else:
+
+                    # ── IMP-03: Trailing Stop + 부분 청산 ────────────────
+                    elif current_price > 0:
+                        # 최고가 갱신
+                        prev_high = self._highest_price.get(symbol, current_price)
+                        if current_price > prev_high:
+                            self._highest_price[symbol] = current_price
+                            prev_high = current_price
+
+                        trailing_stop_price = prev_high * (1 - self.trailing_stop_pct / 100)
+
+                        # +3% 부분 청산 (50%) - 아직 미실행인 경우
+                        if (pl_pct >= self.partial_take_profit_pct
+                                and symbol not in self._partial_tp_done
+                                and qty >= 2):
+                            partial_qty = qty // 2
+                            logger.warning(
+                                f"[부분익절] {symbol}: {pl_pct:.2f}% ≥ "
+                                f"+{self.partial_take_profit_pct}% → {partial_qty}주 50% 청산"
+                            )
+                            self._partial_tp_done.add(symbol)
+                            # 부분 청산 실행
+                            try:
+                                if is_market:
+                                    await loop.run_in_executor(
+                                        None,
+                                        lambda s=symbol, q=partial_qty: self.broker.api.submit_order(
+                                            symbol=s, qty=q, side='sell',
+                                            type='market', time_in_force='day'
+                                        )
+                                    )
+                                else:
+                                    lp = round(current_price * 0.995, 2)
+                                    await loop.run_in_executor(
+                                        None,
+                                        lambda s=symbol, q=partial_qty, p=lp: self.broker.api.submit_order(
+                                            symbol=s, qty=q, side='sell',
+                                            type='limit', time_in_force='day',
+                                            limit_price=p, extended_hours=True
+                                        )
+                                    )
+                                logger.warning(f"[부분익절] {symbol} {partial_qty}주 주문 완료")
+                                self._daily_exit_count += 1
+                            except Exception as _pe:
+                                self._partial_tp_done.discard(symbol)
+                                logger.error(f"[부분익절] {symbol} 주문 실패: {_pe}")
+                            continue
+
+                        # Trailing Stop 히트
+                        if current_price <= trailing_stop_price and pl_pct > 0:
+                            sell_type = "TRAILING_STOP"
+                            logger.warning(
+                                f"[트레일링스탑] {symbol}: 현재가 ${current_price:.2f} ≤ "
+                                f"트레일링스탑 ${trailing_stop_price:.2f} "
+                                f"(최고가 ${prev_high:.2f} × {100-self.trailing_stop_pct}%) → 매도"
+                            )
+
+                    if sell_type is None:
                         continue
 
                     # ── 중복 주문 방지: Alpaca open orders 직접 조회 ──
@@ -858,6 +1021,15 @@ class AutoTradingBotV2:
                             f"[{sell_type}] {symbol} 미체결 매도 주문 존재 - 중복 주문 스킵"
                         )
                         self._pending_sell_symbols.add(symbol)  # 동기화
+                        continue
+
+                    # NEW-04: 일일 청산 횟수 체크
+                    self._reset_daily_counts_if_needed()
+                    if self._daily_exit_count >= self.max_exits_per_day:
+                        logger.warning(
+                            f"[{sell_type}] {symbol} - 일일 최대 청산 횟수 도달 "
+                            f"({self._daily_exit_count}/{self.max_exits_per_day}), 스킵"
+                        )
                         continue
 
                     try:
@@ -902,6 +1074,10 @@ class AutoTradingBotV2:
                         )
                         # 쿨다운 등록: 매도 완료 후 동일 종목 재진입 방지
                         self._recently_sold[symbol] = datetime.now()
+                        # IMP-03: 최고가/부분청산 상태 초기화
+                        self._highest_price.pop(symbol, None)
+                        self._partial_tp_done.discard(symbol)
+                        self._daily_exit_count += 1
                         logger.info(
                             f"[쿨다운 등록] {symbol} → {self.trade_cooldown_minutes}분간 재매수 차단"
                         )
@@ -1004,6 +1180,18 @@ class AutoTradingBotV2:
 
                 logger.info(f"{'=' * 70}")
 
+                # ── IMP-01: VIX/SPY 하드 게이트 체크 ──────────────
+                if self.market_gate:
+                    loop = asyncio.get_event_loop()
+                    gate_result = await loop.run_in_executor(None, self.market_gate.check)
+                    if not gate_result.allowed:
+                        logger.warning(
+                            f"[MarketGate] 신규 진입 금지: {gate_result.reason} "
+                            f"— 워치리스트 스캔 건너뜀"
+                        )
+                        await asyncio.sleep(self.market_scan_interval * 60)
+                        continue
+
                 # 워치리스트 생성
                 watchlist = await self.watchlist_generator.generate_watchlist()
 
@@ -1055,20 +1243,115 @@ class AutoTradingBotV2:
                 logger.error(f"Stage 1 오류: {e}")
                 await asyncio.sleep(60)  # 오류 시 1분 대기
 
+    async def _on_ws_sl_hit(self, symbol: str, price: float, reason: str):
+        """WebSocket SL/TP 히트 콜백 - 즉시 청산 주문 실행"""
+        if not self.auto_trading_enabled:
+            logger.warning(f"[WS {reason}] {symbol} @ ${price:.2f} - 시뮬레이션 모드, 실행 안 함")
+            return
+
+        if symbol in self._pending_sell_symbols:
+            logger.info(f"[WS {reason}] {symbol} - 미체결 매도 주문 존재, 스킵")
+            return
+
+        self._pending_sell_symbols.add(symbol)
+        try:
+            loop = asyncio.get_event_loop()
+            positions = await loop.run_in_executor(None, self.broker.api.list_positions)
+            pos = next((p for p in positions if p.symbol == symbol), None)
+            if pos is None:
+                return
+
+            qty = int(float(pos.qty))
+            # 부분 익절: 50% 수량만 청산
+            if reason == "PARTIAL_TP" and qty >= 2:
+                qty = qty // 2
+
+            order = await loop.run_in_executor(
+                None,
+                lambda s=symbol, q=qty: self.broker.api.submit_order(
+                    symbol=s, qty=q, side='sell', type='market', time_in_force='day'
+                )
+            )
+            logger.warning(f"[WS {reason}] {symbol} {qty}주 즉시 청산 완료 (order_id={order.id})")
+
+            if reason != "PARTIAL_TP":
+                self._recently_sold[symbol] = datetime.now()
+                self._highest_price.pop(symbol, None)
+                self._partial_tp_done.discard(symbol)
+                self._daily_exit_count += 1
+            else:
+                self._partial_tp_done.add(symbol)
+                self._daily_exit_count += 1
+
+            unrealized_pl = float(getattr(pos, 'unrealized_pl', 0) or 0)
+            pl_pct = float(getattr(pos, 'unrealized_plpc', 0) or 0) * 100
+            current_price = float(getattr(pos, 'current_price', price) or price)
+            self._log_trade_to_db(
+                symbol=symbol, action=reason, quantity=qty,
+                price=current_price, pnl=unrealized_pl, order_id=str(order.id),
+            )
+            self._send_telegram_notify(
+                "sell", symbol=symbol, filled_price=current_price,
+                quantity=qty, pnl=unrealized_pl, pnl_pct=pl_pct, sell_type=reason,
+            )
+        except Exception as e:
+            self._pending_sell_symbols.discard(symbol)
+            logger.error(f"[WS {reason}] {symbol} 즉시 청산 실패: {e}")
+        finally:
+            if reason != "PARTIAL_TP":
+                self._pending_sell_symbols.discard(symbol)
+
+    async def _sync_ws_positions(self):
+        """보유 포지션을 WebSocket 모니터에 동기화 (30초마다)"""
+        while self.is_running:
+            try:
+                await asyncio.sleep(30)
+                if self.ws_monitor is None:
+                    continue
+                loop = asyncio.get_event_loop()
+                positions = await loop.run_in_executor(None, self.broker.api.list_positions)
+                pos_map = {}
+                for pos in positions:
+                    sym = pos.symbol
+                    entry_price = float(getattr(pos, 'avg_entry_price', 0) or 0)
+                    current_price = float(getattr(pos, 'current_price', entry_price) or entry_price)
+                    sl_price = entry_price * (1 - self.stop_loss_percent / 100)
+                    pos_map[sym] = {
+                        'entry_price': entry_price,
+                        'sl_price': sl_price,
+                        'highest_price': self._highest_price.get(sym, current_price),
+                        'partial_tp_done': sym in self._partial_tp_done,
+                    }
+                self.ws_monitor.update_positions(pos_map)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.debug(f"WS 포지션 동기화 오류 (무시): {e}")
+
     async def run_async(self):
         """메인 비동기 루프"""
         logger.info("\n" + "=" * 70)
-        logger.info("🚀 자동매매 봇 V2 시작!")
+        logger.info("자동매매 봇 V2 시작!")
         logger.info("=" * 70)
 
         if not self.auto_trading_enabled:
-            logger.warning("\n⚠️⚠️⚠️ 자동매매가 비활성화되어 있습니다 ⚠️⚠️⚠️")
+            logger.warning("\n자동매매가 비활성화되어 있습니다")
             logger.warning("시뮬레이션 모드로 실행됩니다 (실제 주문 없음)")
             logger.warning("AUTO_TRADING_ENABLED=true로 설정하세요.\n")
 
         self.is_running = True
 
+        # NEW-02: WebSocket 실시간 SL/TP 모니터 시작
+        if self.ws_monitor:
+            await self.ws_monitor.start()
+            ws_sync_task = asyncio.create_task(
+                self._sync_ws_positions(), name="ws_position_sync"
+            )
+        else:
+            ws_sync_task = None
+
         # 손절 모니터를 독립 태스크로 실행 (Stage 1 오류와 무관하게 유지)
+        # WebSocket 연결 장애 시 폴백으로만 동작
         stop_loss_task = asyncio.create_task(
             self._stop_loss_monitor(), name="stop_loss_monitor"
         )
@@ -1084,6 +1367,8 @@ class AutoTradingBotV2:
             traceback.print_exc()
         finally:
             stop_loss_task.cancel()
+            if ws_sync_task:
+                ws_sync_task.cancel()
             await self.cleanup()
 
     def run(self):
@@ -1125,7 +1410,12 @@ class AutoTradingBotV2:
         self.is_running = False
 
         try:
-            # 모니터 중지
+            # WebSocket 모니터 중지
+            if hasattr(self, 'ws_monitor') and self.ws_monitor:
+                await self.ws_monitor.stop()
+                logger.info("✓ WebSocket 실시간 모니터 중지")
+
+            # 고주기 모니터 중지
             if hasattr(self, 'high_freq_monitor'):
                 await self.high_freq_monitor.stop()
                 logger.info("✓ 고주기 모니터 중지")
