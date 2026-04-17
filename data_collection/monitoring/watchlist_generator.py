@@ -321,23 +321,31 @@ class WatchlistGenerator:
 
     async def _get_snapshots(self, symbols: List[str]) -> Dict:
         """
-        종목 스냅샷 배치 조회 (SNAPSHOT_BATCH_SIZE 단위)
+        종목 스냅샷 배치 조회 (SNAPSHOT_BATCH_SIZE 단위, 실패 시 최대 3회 재시도)
         """
         all_snapshots = {}
         total_batches = (len(symbols) + SNAPSHOT_BATCH_SIZE - 1) // SNAPSHOT_BATCH_SIZE
 
         for batch_idx, i in enumerate(range(0, len(symbols), SNAPSHOT_BATCH_SIZE), 1):
             batch = symbols[i:i + SNAPSHOT_BATCH_SIZE]
-            try:
-                if total_batches > 1:
-                    logger.debug(f"스냅샷 배치 {batch_idx}/{total_batches} ({len(batch)}개)")
-                request = StockSnapshotRequest(symbol_or_symbols=batch)
-                snapshots = await asyncio.get_event_loop().run_in_executor(
-                    None, lambda r=request: self.client.get_stock_snapshot(r)
-                )
-                all_snapshots.update(snapshots)
-            except Exception as e:
-                logger.warning(f"스냅샷 배치 {batch_idx} 실패: {e}")
+            if total_batches > 1:
+                logger.debug(f"스냅샷 배치 {batch_idx}/{total_batches} ({len(batch)}개)")
+
+            for attempt in range(3):
+                try:
+                    request = StockSnapshotRequest(symbol_or_symbols=batch)
+                    snapshots = await asyncio.get_event_loop().run_in_executor(
+                        None, lambda r=request: self.client.get_stock_snapshot(r)
+                    )
+                    all_snapshots.update(snapshots)
+                    break
+                except Exception as e:
+                    wait = 2 ** attempt  # 1초, 2초, 4초
+                    if attempt < 2:
+                        logger.warning(f"스냅샷 배치 {batch_idx} 실패 (재시도 {attempt+1}/3, {wait}s 후): {e}")
+                        await asyncio.sleep(wait)
+                    else:
+                        logger.error(f"스냅샷 배치 {batch_idx} 최종 실패 (3회 시도): {e}")
 
         return all_snapshots
 
