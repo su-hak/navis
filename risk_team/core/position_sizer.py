@@ -15,16 +15,16 @@ class PositionSizer:
     포지션 사이징 계산기
 
     원칙:
-    - 기본: 총 자산의 10%
+    - 미검증 전략에서 Kelly Criterion 원칙: 축소된 사이징
     - 보유 포지션이 많을수록 비율 축소
-    - 최소 5%, 최대 20%
+    - 최소 3%, 최대 10%
     """
 
     def __init__(
         self,
-        min_position_pct: float = 0.05,
-        max_position_pct: float = 0.20,
-        base_position_pct: float = 0.10,
+        min_position_pct: float = 0.03,
+        max_position_pct: float = 0.10,
+        base_position_pct: float = 0.06,
     ):
         self.min_position_pct = min_position_pct
         self.max_position_pct = max_position_pct
@@ -34,24 +34,24 @@ class PositionSizer:
         """
         현재 포지션 수에 따른 투자 비율 결정
 
-        보유 포지션이 많을수록 신규 진입 비율을 줄여
-        포트폴리오 집중 리스크를 낮춤
+        CRIT-02: Kelly Criterion 위반 방지 - 사이징 상한 축소
+        0개→10%, 1개→8%, 2개→6%, 3개→5%, 4+개→3%
 
         Returns:
-            투자 비율 (0.05 ~ 0.20)
+            투자 비율 (0.03 ~ 0.10)
         """
         count = len(current_positions)
 
         if count == 0:
-            pct = self.max_position_pct       # 0.20
+            pct = self.max_position_pct       # 0.10
         elif count == 1:
-            pct = 0.15
-        elif count == 2:
-            pct = self.base_position_pct      # 0.10
-        elif count == 3:
             pct = 0.08
+        elif count == 2:
+            pct = self.base_position_pct      # 0.06
+        elif count == 3:
+            pct = 0.05
         else:
-            pct = self.min_position_pct       # 0.05
+            pct = self.min_position_pct       # 0.03
 
         logger.debug(f"포지션 비율 결정 - 보유 {count}개 → {pct*100:.0f}%")
         return pct

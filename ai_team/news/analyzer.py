@@ -6,7 +6,7 @@ News Analyzer Module
 
 import logging
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
@@ -18,6 +18,67 @@ from ai_team.config import config
 
 
 logger = logging.getLogger(__name__)
+
+
+# NEW-03: 뉴스 타이밍 규칙
+NEWS_FRESHNESS_RULES = {
+    "max_age_minutes": 60,      # 60분 이상 된 뉴스 → 감성 분석 제외
+    "catalyst_boost": 0.2,      # 갭 직전 10분 이내 뉴스 → 점수 +0.2 (촉매 추정)
+    "stale_penalty": -0.15,     # 30~60분 된 뉴스 → 점수 -0.15
+}
+
+
+def filter_news_by_timing(
+    articles: List[Dict],
+    gap_time: datetime,
+    rules: dict = NEWS_FRESHNESS_RULES,
+) -> List[Dict]:
+    """
+    갭 발생 시점 기준 유효 뉴스만 필터링 + 점수 보정 (NEW-03)
+
+    Args:
+        articles:  뉴스 리스트 (각 항목에 'published_at' datetime 필드 필요)
+        gap_time:  갭 감지 시각 (datetime, timezone-aware 권장)
+        rules:     타이밍 규칙 dict
+
+    Returns:
+        필터링 + timing_boost 필드가 추가된 뉴스 리스트
+    """
+    max_age = timedelta(minutes=rules["max_age_minutes"])
+    catalyst_window = timedelta(minutes=10)
+    stale_threshold = timedelta(minutes=30)
+    cutoff = gap_time - max_age
+
+    filtered = []
+    for article in articles:
+        pub = article.get('published_at')
+        if pub is None:
+            continue
+
+        # timezone naive/aware 정규화
+        if hasattr(pub, 'tzinfo') and pub.tzinfo is not None:
+            gap_ref = gap_time.replace(tzinfo=pub.tzinfo) if gap_time.tzinfo is None else gap_time
+        else:
+            gap_ref = gap_time.replace(tzinfo=None) if gap_time.tzinfo is not None else gap_time
+
+        if pub < cutoff:
+            continue  # 너무 오래된 뉴스 제외
+
+        age = gap_ref - pub
+        boost = 0.0
+
+        if age <= catalyst_window:
+            # 갭 직전 10분 이내 = 촉매 뉴스 추정
+            boost = rules["catalyst_boost"]
+        elif age > stale_threshold:
+            # 30분 이상 된 뉴스 = stale penalty
+            boost = rules["stale_penalty"]
+
+        article = dict(article)
+        article['timing_boost'] = boost
+        filtered.append(article)
+
+    return filtered
 
 
 class NewsSentiment(BaseModel):
@@ -80,7 +141,7 @@ class NewsAnalyzer:
             ("user", "종목: {symbol}\n\n최근 뉴스:\n{news_text}")
         ])
 
-    def analyze_news_sentiment(self, symbol: str) -> Dict:
+    def analyze_news_sentiment(self, symbol: str, gap_time: datetime = None) -> Dict:
         """
         뉴스 감성 분석
 
@@ -125,6 +186,20 @@ class NewsAnalyzer:
                     'news_count': 0
                 }
 
+            # NEW-03: 타이밍 필터 적용
+            ref_time = gap_time or datetime.now()
+            news_list = filter_news_by_timing(news_list, ref_time)
+            if not news_list:
+                logger.info(f"{symbol}: 타이밍 필터 후 유효 뉴스 없음")
+                return {
+                    'sentiment_score': 0.0,
+                    'sentiment_label': 'neutral',
+                    'key_events': [],
+                    'risk_factors': [],
+                    'summary': '60분 이내 유효 뉴스 없음',
+                    'news_count': 0
+                }
+
             # 뉴스 텍스트 준비
             news_text = self._format_news_for_analysis(news_list)
 
@@ -137,9 +212,20 @@ class NewsAnalyzer:
                 "format_instructions": self.parser.get_format_instructions()
             })
 
+            # NEW-03: 타이밍 부스트 합산 후 클리핑
+            avg_timing_boost = sum(
+                n.get('timing_boost', 0.0) for n in news_list
+            ) / len(news_list)
+            adjusted_score = max(-1.0, min(1.0, result.sentiment_score + avg_timing_boost))
+            if avg_timing_boost != 0.0:
+                logger.info(
+                    f"{symbol} 타이밍 보정: {result.sentiment_score:+.2f} "
+                    f"+ boost {avg_timing_boost:+.2f} = {adjusted_score:+.2f}"
+                )
+
             # 결과 반환
             return {
-                'sentiment_score': result.sentiment_score,
+                'sentiment_score': adjusted_score,
                 'sentiment_label': result.sentiment_label,
                 'key_events': result.key_events,
                 'risk_factors': result.risk_factors,

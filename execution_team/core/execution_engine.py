@@ -104,9 +104,9 @@ class ExecutionEngine:
                 broker_order_id=broker_order_id
             )
 
-            # 5. 체결 확인 (시장가인 경우 빠르게 체결됨)
+            # 5. 체결 확인 - IMP-04: 타임아웃 30초로 연장
             if signal.order_type.name == "MARKET":
-                self._wait_for_fill(order.order_id, timeout=10)
+                self._wait_for_fill(order.order_id, timeout=30)
 
             # 6. 결과 생성
             order = self.order_manager.get_order(order.order_id)
@@ -371,11 +371,16 @@ class ExecutionEngine:
 
     def _wait_for_fill(self, order_id: str, timeout: float = 30.0) -> None:
         """
-        체결 대기
+        체결 대기 - IMP-04: Partial Fill 명시적 처리
 
         Args:
             order_id: 주문 ID
-            timeout: 타임아웃 (초)
+            timeout: 타임아웃 (초, 기본 30초)
+
+        Partial Fill 처리 흐름:
+          1. 부분 체결 수량으로 포지션 등록
+          2. 타임아웃까지 미체결 잔량 대기 후 취소
+          3. 실제 체결 수량 기준으로 결과 확정
         """
         start_time = time.time()
         check_interval = 0.5  # 0.5초마다 체크
@@ -410,12 +415,43 @@ class ExecutionEngine:
                     logger.info(f"주문 종료 - ID: {order_id}, 상태: {order.status.value}")
                     return
 
+                # Partial Fill 감지: 일부 체결 + 아직 SUBMITTED/PENDING 상태
+                if (order_info['filled_quantity'] > 0
+                        and order_info['filled_quantity'] < order.quantity
+                        and order_info['status'] not in (
+                            OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.FAILED
+                        )):
+                    logger.info(
+                        f"Partial Fill 감지 - ID: {order_id}, "
+                        f"체결: {order_info['filled_quantity']}/{order.quantity}"
+                    )
+
             except BrokerError as e:
                 logger.warning(f"주문 상태 조회 실패: {e}")
 
             time.sleep(check_interval)
 
-        logger.warning(f"체결 확인 타임아웃 - ID: {order_id}")
+        # ── 타임아웃: Partial Fill 처리 ──────────────────────
+        order = self.order_manager.get_order(order_id)
+        if order and order.broker_order_id and not order.is_terminal:
+            filled_qty = order.filled_quantity or 0
+            if filled_qty > 0:
+                # 부분 체결 수량으로 포지션 확정 + 미체결 잔량 취소
+                logger.warning(
+                    f"체결 타임아웃 - Partial Fill 처리: "
+                    f"{filled_qty}/{order.quantity}주 체결, 미체결 잔량 취소 시도"
+                )
+                try:
+                    self.broker.cancel_order(order.broker_order_id)
+                    self.order_manager.update_status(order_id, OrderStatus.FILLED)
+                    logger.info(
+                        f"Partial Fill 확정 - ID: {order_id}, "
+                        f"체결 수량: {filled_qty}주 @ ${order.filled_price:.2f}"
+                    )
+                except Exception as e:
+                    logger.error(f"미체결 잔량 취소 실패 (무시): {e}")
+            else:
+                logger.warning(f"체결 확인 타임아웃 (0주 체결) - ID: {order_id}")
 
     # ============ 통계 및 관리 ============
 
