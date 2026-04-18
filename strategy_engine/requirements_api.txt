@@ -14,5 +14,8 @@ uvicorn[standard]>=0.24.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 
+# Market data
+yfinance>=0.2.0
+
 # Optional (if needed)
 python-multipart>=0.0.6
