@@ -277,12 +277,12 @@ class IntradayDataLoader:
         result: Dict[str, Dict[date, pd.DataFrame]] = {}
 
         for sym in symbols:
-            if sym not in raw:
+            if sym not in raw.data:
                 logger.warning(f"{sym}: 5분봉 데이터 없음")
                 continue
 
             rows = []
-            for b in raw[sym]:
+            for b in raw.data[sym]:
                 ts = b.timestamp
                 # Alpaca 타임스탬프는 UTC — ET로 변환
                 if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
@@ -347,10 +347,10 @@ class IntradayDataLoader:
 
         result = {}
         for sym in symbols:
-            if sym not in raw:
+            if sym not in raw.data:
                 continue
             rows = []
-            for b in raw[sym]:
+            for b in raw.data[sym]:
                 d = b.timestamp.date() if hasattr(b.timestamp, 'date') else b.timestamp
                 rows.append({
                     'date': d,
