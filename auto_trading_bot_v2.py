@@ -1159,6 +1159,11 @@ class AutoTradingBotV2:
 
                 now_et = datetime.now(et_tz)
                 if now_et.weekday() >= 5:  # 토(5), 일(6)
+                    # 고주기 모니터도 중지 (장 닫힘)
+                    if self.high_freq_monitor.is_running:
+                        await self.high_freq_monitor.stop()
+                        logger.info("주말 휴장 — 고주기 모니터 중지")
+
                     sleep_sec = self._seconds_until_monday_premarket()
                     wake_time = now_et + __import__('datetime').timedelta(seconds=sleep_sec)
                     logger.info(
@@ -1174,9 +1179,12 @@ class AutoTradingBotV2:
 
                 # 시장 시간 체크
                 is_market_hours = self._is_market_hours()
+                is_extended = self._is_extended_hours()
                 logger.info(f"  미국 시장 시간: {'YES (장중)' if is_market_hours else 'NO (장외)'}")
-                if not is_market_hours:
-                    logger.warning("  장외 시간이므로 워치리스트가 비어있을 수 있습니다")
+                if not is_market_hours and not is_extended:
+                    logger.info("  장외 시간 — 스캔 생략, 다음 주기까지 대기")
+                    await asyncio.sleep(self.market_scan_interval * 60)
+                    continue
 
                 logger.info(f"{'=' * 70}")
 
