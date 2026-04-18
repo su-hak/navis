@@ -137,11 +137,14 @@ class AutoTradingBotV2:
 
         # Stage 2 설정 (고주기 감시)
         self.monitor_interval = int(os.getenv('MONITOR_INTERVAL_SECONDS', '10'))  # 5~10초
-        self.price_change_threshold = float(os.getenv('PRICE_CHANGE_THRESHOLD', '1.5'))  # 1.5%
+        # SPIKE_TRIGGER: constants 단일 소스 (env 오버라이드 금지)
+        # .env 의 PRICE_CHANGE_THRESHOLD 오버라이드 불허:
+        # 백테스트(IntradayBacktestConfig)와 라이브가 항상 같은 트리거 사용
+        from config.trading_constants import TAKE_PROFIT_PCT, STOP_LOSS_PCT, SPIKE_TRIGGER_PCT
+        self.price_change_threshold = SPIKE_TRIGGER_PCT * 100  # constants 단일 소스
 
         # 리스크 관리 — TP/SL 수치는 config/trading_constants.py 에서만 관리 (BLOCK-03)
         # .env 의 TAKE_PROFIT_PERCENT 오버라이드 불허: 백테스트와 라이브가 항상 같은 TP 사용
-        from config.trading_constants import TAKE_PROFIT_PCT, STOP_LOSS_PCT
         self.max_investment_percent = float(os.getenv('MAX_INVESTMENT_PERCENT', '10.0'))
         self.stop_loss_percent = float(os.getenv('STOP_LOSS_PERCENT', str(STOP_LOSS_PCT * 100)))
         self.take_profit_percent = TAKE_PROFIT_PCT * 100  # constants 단일 소스 (env 오버라이드 금지)

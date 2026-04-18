@@ -52,6 +52,8 @@ from config.trading_constants import (
     ATR_SL_MULTIPLIER,
     TRAILING_STOP_PCT,
     PARTIAL_TP_PCT,
+    SPIKE_TRIGGER_PCT,
+    MIN_GAP_PCT,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,8 +76,8 @@ class IntradayBacktestConfig:
     max_daily_loss_pct: float = 0.05
 
     # ── 진입 조건 ─────────────────────────────────────────────────────────
-    gap_threshold_pct: float = 3.0       # 시가 갭 임계값 (%) - 기획서: 3%
-    spike_trigger_pct: float = 1.5       # 장중 시가 대비 스파이크 트리거 (%) - 기획서: 1.5%
+    gap_threshold_pct: float = MIN_GAP_PCT * 100       # 시가 갭 임계값 (%) — constants 단일 소스
+    spike_trigger_pct: float = SPIKE_TRIGGER_PCT * 100  # 스파이크 트리거 (%) — constants 단일 소스
     warmup_periods: int = 200            # 일봉 워밍업 기간 (ATR 계산용)
     buy_score_threshold: float = 75.0    # 전략 엔진 매수 점수 기준
 
@@ -275,12 +277,12 @@ class IntradayDataLoader:
         result: Dict[str, Dict[date, pd.DataFrame]] = {}
 
         for sym in symbols:
-            if sym not in raw:
+            if sym not in raw.data:
                 logger.warning(f"{sym}: 5분봉 데이터 없음")
                 continue
 
             rows = []
-            for b in raw[sym]:
+            for b in raw.data[sym]:
                 ts = b.timestamp
                 # Alpaca 타임스탬프는 UTC — ET로 변환
                 if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
@@ -345,10 +347,10 @@ class IntradayDataLoader:
 
         result = {}
         for sym in symbols:
-            if sym not in raw:
+            if sym not in raw.data:
                 continue
             rows = []
-            for b in raw[sym]:
+            for b in raw.data[sym]:
                 d = b.timestamp.date() if hasattr(b.timestamp, 'date') else b.timestamp
                 rows.append({
                     'date': d,
