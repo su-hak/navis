@@ -131,10 +131,13 @@ class AutoTradingBotV2:
         self.monitor_interval = int(os.getenv('MONITOR_INTERVAL_SECONDS', '10'))  # 5~10초
         self.price_change_threshold = float(os.getenv('PRICE_CHANGE_THRESHOLD', '1.5'))  # 1.5%
 
-        # 리스크 관리 (기획서: 1회 10%, 손절 -2%, 일일 -5%)
+        # 리스크 관리 (BUG-01: TP는 config/trading_constants.py 에서 단일 소스 관리)
+        from config.trading_constants import TAKE_PROFIT_PCT, STOP_LOSS_PCT
         self.max_investment_percent = float(os.getenv('MAX_INVESTMENT_PERCENT', '10.0'))
-        self.stop_loss_percent = float(os.getenv('STOP_LOSS_PERCENT', '2.0'))
-        self.take_profit_percent = float(os.getenv('TAKE_PROFIT_PERCENT', '5.0'))
+        self.stop_loss_percent = float(os.getenv('STOP_LOSS_PERCENT', str(STOP_LOSS_PCT * 100)))
+        # TAKE_PROFIT_PERCENT 환경변수가 있으면 그것을 쓰되, 없으면 중앙 상수 6% 사용
+        # (이전 .env 에 5.0으로 설정된 경우를 허용하나 권장하지 않음)
+        self.take_profit_percent = float(os.getenv('TAKE_PROFIT_PERCENT', str(TAKE_PROFIT_PCT * 100)))
         self.max_daily_loss_percent = float(os.getenv('MAX_DAILY_LOSS_PERCENT', '5.0'))
         self.max_positions = int(os.getenv('MAX_POSITIONS', '5'))
 

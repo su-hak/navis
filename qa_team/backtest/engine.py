@@ -26,23 +26,30 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from config.trading_constants import (
+    TAKE_PROFIT_PCT,
+    STOP_LOSS_PCT,
+    BACKTEST_SLIPPAGE_PCT,
+    BACKTEST_COMMISSION_PCT,
+)
+
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class BacktestConfig:
     """백테스트 설정"""
-    initial_capital: float = 1_000_000.0      # 초기 자본 (1,000,000원)
-    stop_loss_pct: float = 0.02               # 손절 -2%
-    take_profit_pct: float = 0.10             # 익절 +10%
-    max_daily_loss_pct: float = 0.05          # 일일 최대 손실 -5%
-    max_positions: int = 5                    # 최대 동시 보유 종목
-    min_position_pct: float = 0.05            # 최소 투자 비율 5%
-    max_position_pct: float = 0.20            # 최대 투자 비율 20%
-    buy_score_threshold: float = 75.0         # 매수 점수 기준
-    commission_rate: float = 0.001            # 수수료 0.1%
-    slippage_rate: float = 0.001              # 슬리피지 0.1%
-    warmup_periods: int = 200                 # 지표 계산을 위한 워밍업 기간 (200일)
+    initial_capital: float = 1_000_000.0          # 초기 자본
+    stop_loss_pct: float = STOP_LOSS_PCT           # 손절 -2% (BUG-01 통합)
+    take_profit_pct: float = TAKE_PROFIT_PCT       # 익절 +6% (BUG-01: 이전 10% → 통합)
+    max_daily_loss_pct: float = 0.05              # 일일 최대 손실 -5%
+    max_positions: int = 5                         # 최대 동시 보유 종목
+    min_position_pct: float = 0.05               # 최소 투자 비율 5%
+    max_position_pct: float = 0.20               # 최대 투자 비율 20%
+    buy_score_threshold: float = 75.0             # 매수 점수 기준
+    commission_rate: float = BACKTEST_COMMISSION_PCT   # 수수료 0.1%
+    slippage_rate: float = BACKTEST_SLIPPAGE_PCT       # 슬리피지 0.5% (NEW-02: 이전 0.1%)
+    warmup_periods: int = 200                      # 지표 계산을 위한 워밍업 기간 (200일)
 
 
 @dataclass
@@ -477,3 +484,81 @@ class BacktestEngine:
             except Exception as e:
                 logger.error(f"{symbol} 백테스트 실패: {e}")
         return results
+
+    def optimize_score_threshold(
+        self,
+        symbol: str,
+        df: pd.DataFrame,
+        threshold_range: Tuple[float, float] = (55.0, 85.0),
+        step: float = 5.0,
+        **run_kwargs,
+    ) -> Dict[str, object]:
+        """
+        매수 점수 임계값(buy_score_threshold) 최적화 (NEW-03)
+
+        지정된 범위를 step 단위로 탐색하여 Sharpe 비율이 가장 높은
+        임계값과 그 결과를 반환합니다.
+
+        Args:
+            symbol:          종목 심볼
+            df:              OHLCV 데이터
+            threshold_range: (최솟값, 최댓값) — 기본 (55, 85)
+            step:            탐색 간격 — 기본 5
+            **run_kwargs:    run() 에 추가로 전달할 인자
+
+        Returns:
+            {
+                'best_threshold': float,
+                'best_sharpe':    float,
+                'all_results':    {threshold: BacktestResult},
+            }
+        """
+        low, high = threshold_range
+        thresholds = []
+        t = low
+        while t <= high + 1e-9:
+            thresholds.append(round(t, 2))
+            t += step
+
+        all_results: Dict[float, BacktestResult] = {}
+        best_threshold = thresholds[0]
+        best_sharpe = float('-inf')
+
+        logger.info(f"[optimize_score_threshold] {symbol} — 탐색 범위 {thresholds}")
+
+        for threshold in thresholds:
+            # 임시로 설정 교체
+            original_threshold = self.config.buy_score_threshold
+            self.config.buy_score_threshold = threshold
+            self._setup_components()
+
+            try:
+                result = self.run(symbol=symbol, df=df, **run_kwargs)
+                all_results[threshold] = result
+
+                logger.info(
+                    f"  threshold={threshold:.0f}: Sharpe={result.sharpe_ratio:.3f}, "
+                    f"Win={result.win_rate_pct:.1f}%, MDD={result.max_drawdown_pct:.1f}%, "
+                    f"Trades={result.total_trades}"
+                )
+
+                if result.sharpe_ratio > best_sharpe and result.total_trades >= self.MIN_TRADES:
+                    best_sharpe = result.sharpe_ratio
+                    best_threshold = threshold
+
+            except Exception as e:
+                logger.warning(f"  threshold={threshold:.0f}: 오류 — {e}")
+            finally:
+                self.config.buy_score_threshold = original_threshold
+                self._setup_components()
+
+        logger.info(
+            f"[optimize_score_threshold] 최적 임계값: {best_threshold:.0f} "
+            f"(Sharpe={best_sharpe:.3f})"
+        )
+
+        return {
+            'best_threshold': best_threshold,
+            'best_sharpe': best_sharpe,
+            'all_results': all_results,
+        }

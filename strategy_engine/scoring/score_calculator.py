@@ -12,6 +12,47 @@ from dataclasses import dataclass, field
 
 from ..indicators.technical_indicators import TechnicalIndicators, IndicatorResult
 
+# ─── BUG-02: 전략별 RSI 스코어링 함수 ─────────────────────────────────────────
+
+def rsi_score_momentum(rsi: float) -> float:
+    """
+    갭 모멘텀 / 브레이크아웃 전략용 RSI 스코어 (BUG-02)
+
+    강한 모멘텀 = RSI 50-70 구간에서 최고점.
+    RSI 30-50 은 모멘텀 부족 → 낮은 점수.
+    RSI > 80 = 과매수, 진입 금지.
+    """
+    if 50 <= rsi <= 70:
+        # 정중앙 60 부근에서 최고점(100) → 양 끝에서 80
+        distance_from_60 = abs(rsi - 60)
+        score = 100 - distance_from_60 * 2  # 60→100, 50/70→80
+    elif 70 < rsi <= 80:
+        score = 80 - (rsi - 70) * 3.0        # 70→80, 80→50
+    elif rsi > 80:
+        score = max(0.0, 50 - (rsi - 80) * 5.0)  # 80→50, 90→0
+    elif 40 <= rsi < 50:
+        score = 30 + (rsi - 40) * 2.0        # 40→30, 50→50 (부드럽게 연결)
+    else:
+        score = max(0.0, 30 - (50 - rsi) * 1.0)  # rsi<40 = 매우 낮음
+    return float(min(100.0, max(0.0, score)))
+
+
+def rsi_score_reversion(rsi: float) -> float:
+    """
+    평균회귀(리버전) 전략용 RSI 스코어 (BUG-02)
+
+    과매도(RSI 30) = 최고점. RSI 50-70 = 낮은 점수.
+    기존 calculate_technical_score 의 RSI 로직과 동일 방향.
+    """
+    if 30 <= rsi <= 50:
+        # 30일 때 100점, 50일 때 60점
+        score = 60 + (50 - rsi) * 2.0
+    elif rsi < 30:
+        score = 50 + rsi * 0.5  # 0→50, 30→65
+    else:  # rsi > 50
+        score = max(0.0, 60 - (rsi - 50) * 1.5)  # 50→60, 70→30, 90→0
+    return float(min(100.0, max(0.0, score)))
+
 
 @dataclass
 class ScoreWeights:
@@ -82,34 +123,34 @@ class ScoreCalculator:
         self.weights = weights or ScoreWeights()
         self.technical_indicators = TechnicalIndicators()
 
-    def calculate_technical_score(self, indicators: IndicatorResult) -> tuple[float, Dict[str, Any]]:
+    def calculate_technical_score(
+        self,
+        indicators: IndicatorResult,
+        strategy_type: str = "momentum",
+    ) -> tuple[float, Dict[str, Any]]:
         """
         기술적 지표 점수 계산 (0~100)
 
         Args:
-            indicators: 기술적 지표 결과
+            indicators:    기술적 지표 결과
+            strategy_type: 전략 종류 — "momentum" | "breakout" | "reversion"
+                           momentum/breakout → rsi_score_momentum()
+                           reversion         → rsi_score_reversion()   (BUG-02)
 
         Returns:
             (점수, 세부 점수)
         """
         scores = {}
 
-        # 1. RSI 점수 (30~70 범위가 이상적)
+        # 1. RSI 점수 — 전략 방향에 맞는 스코어 함수 선택 (BUG-02)
         rsi = indicators.rsi
-        if 30 <= rsi <= 70:
-            # RSI가 30~50일 때 높은 점수 (과매도 영역에서 반등 기대)
-            if rsi <= 50:
-                rsi_score = 60 + (50 - rsi) * 2  # 30일 때 100점, 50일 때 60점
-            else:
-                rsi_score = 60 - (rsi - 50)  # 50일 때 60점, 70일 때 40점
-        elif rsi < 30:
-            # 과매도: 반등 가능성 있지만 리스크
-            rsi_score = 50 + rsi * 0.5  # 0일 때 50점, 30일 때 65점
-        else:  # rsi > 70
-            # 과매수: 조정 가능성
-            rsi_score = max(0, 100 - (rsi - 70) * 2)  # 70일 때 40점, 100일 때 0점
+        if strategy_type in ("momentum", "breakout"):
+            rsi_score = rsi_score_momentum(rsi)
+        else:
+            rsi_score = rsi_score_reversion(rsi)
 
-        scores['rsi_score'] = min(100, max(0, rsi_score))
+        scores['rsi_score'] = rsi_score
+        scores['rsi_scorer'] = strategy_type  # 디버깅용
 
         # 2. MACD 점수
         macd_histogram = indicators.macd_histogram
@@ -347,7 +388,8 @@ class ScoreCalculator:
                               eps_growth: Optional[float] = None,
                               institutional_ownership_change: Optional[float] = None,
                               price_col: str = 'close',
-                              volume_col: str = 'volume') -> ScoreResult:
+                              volume_col: str = 'volume',
+                              strategy_type: str = "momentum") -> ScoreResult:
         """
         종합 점수 계산 (score_stock 함수)
 
@@ -361,6 +403,7 @@ class ScoreCalculator:
             institutional_ownership_change: 기관 보유 변화율
             price_col: 가격 컬럼명
             volume_col: 거래량 컬럼명
+            strategy_type: "momentum" | "breakout" | "reversion"  (BUG-02)
 
         Returns:
             ScoreResult 객체
@@ -368,8 +411,8 @@ class ScoreCalculator:
         # 1. 기술적 지표 계산
         indicators = self.technical_indicators.calculate_all_indicators(df, price_col, volume_col)
 
-        # 2. 각 카테고리 점수 계산
-        technical_score, technical_breakdown = self.calculate_technical_score(indicators)
+        # 2. 각 카테고리 점수 계산 (RSI 방향은 strategy_type 에 따라 결정)
+        technical_score, technical_breakdown = self.calculate_technical_score(indicators, strategy_type)
         volume_score, volume_breakdown = self.calculate_volume_score(indicators.volume_ratio)
         trend_score, trend_breakdown = self.calculate_trend_score(indicators.trend_strength, indicators.price_change_pct)
         news_score, news_breakdown = self.calculate_news_score(news_sentiment, news_count)
@@ -421,5 +464,6 @@ class ScoreCalculator:
         score_stock() 함수 (calculate_total_score의 별칭)
 
         기획서에서 요구하는 score_stock() 함수입니다.
+        strategy_type kwarg 를 그대로 전달하면 BUG-02 RSI 방향이 적용됩니다.
         """
         return self.calculate_total_score(*args, **kwargs)
