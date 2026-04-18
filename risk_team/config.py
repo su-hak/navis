@@ -8,15 +8,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# BUG-01: TP/SL 기본값을 중앙 상수에서 가져옴
+from config.trading_constants import TAKE_PROFIT_PCT as _DEFAULT_TP, STOP_LOSS_PCT as _DEFAULT_SL
+
 
 class RiskConfig:
     """리스크 관리 설정"""
 
     def __init__(self):
-        # ── 손절/익절 ──────────────────────────────────────
-        # 기획서: 손절 -2%, Risk:Reward 1:3 → 익절 +6%
-        self.stop_loss_pct = float(os.getenv("RISK_STOP_LOSS_PCT", "0.02"))
-        self.take_profit_pct = float(os.getenv("RISK_TAKE_PROFIT_PCT", "0.06"))
+        # ── 손절/익절 (BUG-01: 단일 소스 config/trading_constants.py) ─────
+        # 환경변수로 오버라이드 가능하지만 기본값은 중앙 상수에서 가져옴
+        self.stop_loss_pct = float(os.getenv("RISK_STOP_LOSS_PCT", str(_DEFAULT_SL)))
+        self.take_profit_pct = float(os.getenv("RISK_TAKE_PROFIT_PCT", str(_DEFAULT_TP)))
 
         # ── 포지션 사이징 ──────────────────────────────────
         # 기획서: 1회 투자금 총 자산의 5~20%

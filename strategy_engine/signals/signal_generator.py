@@ -11,6 +11,7 @@ from enum import Enum
 from datetime import datetime
 
 from ..scoring.score_calculator import ScoreCalculator, ScoreResult
+from config.trading_constants import TAKE_PROFIT_PCT, STOP_LOSS_PCT, BUY_SIGNAL_THRESHOLD
 
 
 class SignalType(Enum):
@@ -26,7 +27,7 @@ class SignalType(Enum):
 class TradingConditions:
     """매매 조건 설정"""
     # 매수 조건
-    buy_score_threshold: float = 75.0  # 최소 매수 점수
+    buy_score_threshold: float = BUY_SIGNAL_THRESHOLD  # 최소 매수 점수 (config 중앙화)
     buy_volume_ratio_min: float = 1.5  # 최소 거래량 비율
     buy_trend_strength_min: float = 60.0  # 최소 추세 강도
 
@@ -34,9 +35,9 @@ class TradingConditions:
     sell_score_threshold: float = 30.0  # 매도 점수 (이하 시 매도)
     score_drop_threshold: float = 20.0  # 점수 급락 기준 (N점 이상 하락)
 
-    # 손익 조건
-    take_profit_pct: float = 0.10  # 목표 수익률 (10%)
-    stop_loss_pct: float = -0.02  # 손절 기준 (-2%)
+    # 손익 조건 — BUG-01: config/trading_constants.py 에서 단일 소스로 관리
+    take_profit_pct: float = TAKE_PROFIT_PCT   # +6% (이전: 10% 하드코딩)
+    stop_loss_pct: float = -STOP_LOSS_PCT      # -2%
 
     # 추가 조건
     require_uptrend: bool = True  # 상승 추세 필수
@@ -245,7 +246,8 @@ class SignalGenerator:
                             news_count: int = 0,
                             revenue_growth: Optional[float] = None,
                             eps_growth: Optional[float] = None,
-                            institutional_ownership_change: Optional[float] = None) -> Optional[Signal]:
+                            institutional_ownership_change: Optional[float] = None,
+                            strategy_type: str = "momentum") -> Optional[Signal]:
         """
         매수 시그널 생성
 
@@ -257,11 +259,12 @@ class SignalGenerator:
             revenue_growth: 매출 성장률
             eps_growth: EPS 성장률
             institutional_ownership_change: 기관 보유 변화율
+            strategy_type: "momentum" | "breakout" | "reversion"  (BUG-02)
 
         Returns:
             Signal 객체 (조건 미충족 시 None)
         """
-        # 점수 계산
+        # 점수 계산 — strategy_type 전달로 RSI 방향이 결정됨 (BUG-02)
         score_result = self.score_calculator.score_stock(
             symbol=symbol,
             df=df,
@@ -270,6 +273,7 @@ class SignalGenerator:
             revenue_growth=revenue_growth,
             eps_growth=eps_growth,
             institutional_ownership_change=institutional_ownership_change,
+            strategy_type=strategy_type,
         )
 
         current_price = float(df['close'].iloc[-1])
