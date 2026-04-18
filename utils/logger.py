@@ -4,6 +4,10 @@ import sys
 from pathlib import Path
 from config.settings import settings
 
+# httpx가 요청 URL(텔레그램 봇 토큰 포함)을 INFO 레벨로 출력하지 않도록 억제
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 
 def setup_logger(name: str = "navis_agent") -> logging.Logger:
     """
