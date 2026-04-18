@@ -8,6 +8,7 @@ SL/TP 히트 시 < 1초 내 즉시 청산 주문을 실행합니다.
 """
 import asyncio
 import logging
+import threading
 from typing import Dict, Callable, Optional, Set
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ class WebSocketPriceMonitor:
         self.trailing_stop_pct = trailing_stop_pct
         self.partial_tp_pct = partial_tp_pct
 
+        self._lock = threading.Lock()  # BLOCK-01: race condition 방지
         # {symbol: {entry_price, sl_price, highest_price, partial_tp_done}}
         self._positions: Dict[str, dict] = {}
         self._subscribed: Set[str] = set()
@@ -50,18 +52,19 @@ class WebSocketPriceMonitor:
         Args:
             positions: {symbol: {entry_price, sl_price, highest_price, partial_tp_done}}
         """
-        self._positions = positions
-        new_symbols = set(positions.keys())
+        with self._lock:
+            self._positions = positions
+            new_symbols = set(positions.keys())
 
-        added = new_symbols - self._subscribed
-        removed = self._subscribed - new_symbols
+            added = new_symbols - self._subscribed
+            removed = self._subscribed - new_symbols
 
-        if added:
-            logger.info(f"[WS] 구독 추가: {added}")
-        if removed:
-            logger.info(f"[WS] 구독 제거: {removed}")
+            if added:
+                logger.info(f"[WS] 구독 추가: {added}")
+            if removed:
+                logger.info(f"[WS] 구독 제거: {removed}")
 
-        self._subscribed = new_symbols
+            self._subscribed = new_symbols
 
     async def start(self):
         """WebSocket 스트림 시작"""
@@ -134,41 +137,47 @@ class WebSocketPriceMonitor:
 
     async def _check_sl_tp(self, symbol: str, price: float):
         """SL/TP 조건 확인 후 콜백 호출"""
-        pos = self._positions.get(symbol)
-        if pos is None:
-            return
-
-        # 최고가 갱신
-        if price > pos.get('highest_price', price):
-            pos['highest_price'] = price
+        with self._lock:
+            pos = self._positions.get(symbol)
+            if pos is None:
+                return
+            # 최고가 갱신
+            if price > pos.get('highest_price', price):
+                pos['highest_price'] = price
+            # 로컬 스냅샷으로 이후 로직 처리 (lock 외부에서 await 호출)
+            pos_snapshot = dict(pos)
 
         # 손절 체크
-        sl_price = pos.get('sl_price', 0)
+        sl_price = pos_snapshot.get('sl_price', 0)
         if sl_price > 0 and price <= sl_price:
             logger.warning(f"[WS SL] {symbol}: ${price:.2f} ≤ SL ${sl_price:.2f}")
             await self.on_sl_hit(symbol, price, "STOP_LOSS")
-            self._positions.pop(symbol, None)
-            self._subscribed.discard(symbol)
+            with self._lock:
+                self._positions.pop(symbol, None)
+                self._subscribed.discard(symbol)
             return
 
         # Trailing Stop 체크
-        highest = pos.get('highest_price', price)
+        highest = pos_snapshot.get('highest_price', price)
         trailing_sl = highest * (1 - self.trailing_stop_pct / 100)
-        entry_price = pos.get('entry_price', price)
+        entry_price = pos_snapshot.get('entry_price', price)
         if price <= trailing_sl and price > entry_price:
             logger.warning(
                 f"[WS TS] {symbol}: ${price:.2f} ≤ trailing SL ${trailing_sl:.2f} "
                 f"(최고가 ${highest:.2f})"
             )
             await self.on_sl_hit(symbol, price, "TRAILING_STOP")
-            self._positions.pop(symbol, None)
-            self._subscribed.discard(symbol)
+            with self._lock:
+                self._positions.pop(symbol, None)
+                self._subscribed.discard(symbol)
             return
 
         # 부분 익절 체크
-        if not pos.get('partial_tp_done', False):
+        if not pos_snapshot.get('partial_tp_done', False):
             partial_tp = entry_price * (1 + self.partial_tp_pct / 100)
             if price >= partial_tp:
-                pos['partial_tp_done'] = True
+                with self._lock:
+                    if symbol in self._positions:
+                        self._positions[symbol]['partial_tp_done'] = True
                 logger.info(f"[WS TP] {symbol}: ${price:.2f} ≥ 부분익절 ${partial_tp:.2f}")
                 await self.on_sl_hit(symbol, price, "PARTIAL_TP")

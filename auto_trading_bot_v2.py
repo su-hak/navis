@@ -75,6 +75,14 @@ except Exception as _e:
     MARKET_GATE_AVAILABLE = False
     logger.warning(f"MarketGate 비활성화: {_e}")
 
+# 전략 엔진 시그널 생성기 (선택적 - BLOCK-02)
+try:
+    from strategy_engine.signals.signal_generator import SignalGenerator
+    SIGNAL_GENERATOR_AVAILABLE = True
+except Exception as _e:
+    SIGNAL_GENERATOR_AVAILABLE = False
+    logger.warning(f"SignalGenerator 비활성화: {_e}")
+
 # 갭 방향 검증기 (선택적)
 try:
     from strategy_engine.filters.gap_validator import GapValidator
@@ -131,13 +139,12 @@ class AutoTradingBotV2:
         self.monitor_interval = int(os.getenv('MONITOR_INTERVAL_SECONDS', '10'))  # 5~10초
         self.price_change_threshold = float(os.getenv('PRICE_CHANGE_THRESHOLD', '1.5'))  # 1.5%
 
-        # 리스크 관리 (BUG-01: TP는 config/trading_constants.py 에서 단일 소스 관리)
+        # 리스크 관리 — TP/SL 수치는 config/trading_constants.py 에서만 관리 (BLOCK-03)
+        # .env 의 TAKE_PROFIT_PERCENT 오버라이드 불허: 백테스트와 라이브가 항상 같은 TP 사용
         from config.trading_constants import TAKE_PROFIT_PCT, STOP_LOSS_PCT
         self.max_investment_percent = float(os.getenv('MAX_INVESTMENT_PERCENT', '10.0'))
         self.stop_loss_percent = float(os.getenv('STOP_LOSS_PERCENT', str(STOP_LOSS_PCT * 100)))
-        # TAKE_PROFIT_PERCENT 환경변수가 있으면 그것을 쓰되, 없으면 중앙 상수 6% 사용
-        # (이전 .env 에 5.0으로 설정된 경우를 허용하나 권장하지 않음)
-        self.take_profit_percent = float(os.getenv('TAKE_PROFIT_PERCENT', str(TAKE_PROFIT_PCT * 100)))
+        self.take_profit_percent = TAKE_PROFIT_PCT * 100  # constants 단일 소스 (env 오버라이드 금지)
         self.max_daily_loss_percent = float(os.getenv('MAX_DAILY_LOSS_PERCENT', '5.0'))
         self.max_positions = int(os.getenv('MAX_POSITIONS', '5'))
 
@@ -174,6 +181,13 @@ class AutoTradingBotV2:
         self._recently_sold: Dict[str, datetime] = {}  # {symbol: 매도 완료 시각}
         self._pending_sell_symbols: set = set()  # 미체결 매도 주문 있는 종목 (중복 주문 방지)
         self._pending_buy_symbols: set = set()  # 매수 주문 처리 중인 종목 (중복 매수 방지)
+
+        # BLOCK-02: 전략별 RSI 스코어링을 위한 시그널 생성기 및 유니버스 매핑
+        if SIGNAL_GENERATOR_AVAILABLE:
+            self.signal_generator = SignalGenerator()
+        else:
+            self.signal_generator = None
+        self._symbol_strategy_types: Dict[str, str] = {}  # {symbol: "momentum"|"breakout"|"reversion"}
 
         # IMP-03: Trailing Stop 설정
         self.trailing_stop_pct = float(os.getenv('TRAILING_STOP_PCT', '2.0'))        # 최고가 대비 -2% 청산
@@ -538,6 +552,38 @@ class AutoTradingBotV2:
                 )
                 return
 
+        # ── BLOCK-02: strategy_type 조회 + 전략 엔진 점수 검증 ──────────────
+        strategy_type = self._get_strategy_type(symbol)
+        if self.signal_generator is not None:
+            try:
+                loop = asyncio.get_event_loop()
+                bars_df = await loop.run_in_executor(
+                    None, self._fetch_ohlcv_for_scoring, symbol
+                )
+                if bars_df is not None and len(bars_df) >= 50:
+                    validated = self.signal_generator.generate_buy_signal(
+                        symbol, bars_df, strategy_type=strategy_type
+                    )
+                    if validated is None:
+                        logger.info(
+                            f"{symbol} strategy_engine 점수 미달 "
+                            f"(strategy_type={strategy_type}) — 진입 거부"
+                        )
+                        return
+                    logger.info(
+                        f"{symbol} strategy_engine 점수 통과: "
+                        f"{validated.score:.1f} (strategy_type={strategy_type})"
+                    )
+                else:
+                    logger.warning(
+                        f"{symbol} OHLCV 부족 — strategy_engine 점수 검증 생략 "
+                        f"(strategy_type={strategy_type})"
+                    )
+            except Exception as _se:
+                logger.warning(
+                    f"{symbol} strategy_engine 점수 검증 실패 (계속 진행): {_se}"
+                )
+
         # 투자 금액 계산
         account = self.execution_engine.get_account()
         current_cash = account.cash
@@ -578,6 +624,7 @@ class AutoTradingBotV2:
 
         logger.info(f"\n매수 주문 실행 [{session_label}]:")
         logger.info(f"  종목: {symbol}")
+        logger.info(f"  전략: {strategy_type}")
         logger.info(f"  수량: {quantity}주")
         logger.info(f"  예상 투자금: ${investment_amount:.2f}")
         logger.info(f"  이유: {signal['reason']}")
@@ -732,6 +779,43 @@ class AutoTradingBotV2:
             f"총 {len(result)}개 워치리스트"
         )
         return result
+
+    def _get_strategy_type(self, symbol: str) -> str:
+        """symbol의 전략 유형 반환 (BLOCK-02). 매핑 없으면 'momentum'."""
+        return self._symbol_strategy_types.get(symbol, "momentum")
+
+    def _fetch_ohlcv_for_scoring(self, symbol: str):
+        """strategy_engine 점수 계산용 일봉 OHLCV DataFrame 반환 (동기)."""
+        try:
+            from alpaca.data import StockHistoricalDataClient
+            from alpaca.data.requests import StockBarsRequest
+            from alpaca.data.timeframe import TimeFrame
+            from datetime import timedelta
+            import pandas as pd
+
+            client = StockHistoricalDataClient(self.api_key, self.api_secret)
+            end = datetime.utcnow()
+            start = end - timedelta(days=90)  # 약 60 거래일 확보
+            req = StockBarsRequest(
+                symbol_or_symbols=[symbol],
+                timeframe=TimeFrame.Day,
+                start=start,
+                end=end,
+            )
+            bars = client.get_stock_bars(req)
+            symbol_bars = bars.get(symbol, [])
+            if not symbol_bars:
+                return None
+            df = pd.DataFrame([{
+                'open': float(b.open), 'high': float(b.high),
+                'low': float(b.low), 'close': float(b.close),
+                'volume': float(b.volume),
+            } for b in symbol_bars])
+            df.index = pd.to_datetime([b.timestamp for b in symbol_bars])
+            return df
+        except Exception as e:
+            logger.debug(f"{symbol} OHLCV fetch 실패: {e}")
+            return None
 
     def check_risk_limits(self) -> bool:
         """
@@ -1207,6 +1291,11 @@ class AutoTradingBotV2:
                 watchlist = await self.watchlist_generator.generate_watchlist()
 
                 if watchlist:
+                    # BLOCK-02: 워치리스트 종목 strategy_type 업데이트
+                    # WatchlistGenerator는 gap+volume 기준(momentum) 종목만 생성
+                    for _s in watchlist:
+                        self._symbol_strategy_types[_s['symbol']] = "momentum"
+
                     # 포지션 여유가 있을 때만 AI 뉴스 감성 스코어링 실행 (비용 절감)
                     positions = self.execution_engine.get_positions()
                     if len(positions) < self.max_positions:

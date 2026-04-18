@@ -104,13 +104,20 @@ class MarketGate:
         vix = self._fetch_vix()
 
         if spy_closes is None or len(spy_closes) < 201:
-            logger.warning("SPY 데이터 부족 - 게이트 체크 건너뜀 (통과 처리)")
-            return MarketGateResult(allowed=True, reason="SPY 데이터 부족 - 게이트 건너뜀")
+            # SUB-01: 데이터 부족 시 안전하게 진입 차단 (잘못된 MA200으로 판단하는 것보다 안전)
+            logger.warning("SPY 데이터 부족 (200봉 미만) — MA200 계산 불가, 안전 모드로 진입 차단")
+            return MarketGateResult(allowed=False, reason="SPY 데이터 부족 — MA200 계산 불가, 진입 차단")
 
         spy_price = spy_closes[-1]
         spy_prev = spy_closes[-2]
         spy_ma200 = sum(spy_closes[-200:]) / 200
         spy_daily_chg = (spy_price - spy_prev) / spy_prev
+
+        # SUB-01: MA200 이상값 방어
+        import math
+        if spy_ma200 <= 0 or math.isnan(spy_ma200):
+            logger.warning(f"SPY MA200 이상값({spy_ma200}) — 진입 차단")
+            return MarketGateResult(allowed=False, reason=f"SPY MA200 이상값 — 진입 차단")
 
         # ── VIX 체크 ──────────────────────────────────
         if vix is not None and vix > self.vix_threshold:

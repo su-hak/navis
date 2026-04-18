@@ -392,6 +392,18 @@ class StrategyManager:
             return []
         return list(self.strategies[strategy_type].universe)
 
+    def get_strategy_type(self, symbol: str) -> str:
+        """
+        symbol이 속한 전략 유형 반환 (BUG-02)
+
+        여러 전략 유니버스에 속하면 활성화된 첫 번째 전략 반환.
+        어느 유니버스에도 없으면 "momentum" 반환.
+        """
+        for st, config in self.strategies.items():
+            if config.enabled and symbol in config.universe:
+                return st.value
+        return StrategyType.MOMENTUM.value
+
     # ─────────────────────────────────────────────────────────────────────────
 
     def get_statistics(self) -> Dict:
