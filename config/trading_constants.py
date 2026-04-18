@@ -35,6 +35,6 @@ BACKTEST_SLIPPAGE_PCT: float = 0.005    # 0.5% — 갭 스톡 MARKET 주문 현�
 BACKTEST_COMMISSION_PCT: float = 0.001  # 0.1%
 
 # ─── Entry Spike Trigger ─────────────────────────────────────────────────────
-SPIKE_TRIGGER_PCT: float = 0.015    # 시가 대비 +1.5% 스파이크 → 진입 트리거
+SPIKE_TRIGGER_PCT: float = 0.010    # 시가 대비 +1.0% 스파이크 → 진입 트리거 (퀀트팀 요청: 1.5%→1.0%)
 MIN_GAP_PCT: float = 0.03           # 전일 종가 대비 +3% 이상 갭
 MIN_VOLUME_RATIO: float = 3.0       # 평균 대비 3× 이상 거래량

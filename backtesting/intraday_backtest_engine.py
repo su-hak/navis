@@ -52,6 +52,8 @@ from config.trading_constants import (
     ATR_SL_MULTIPLIER,
     TRAILING_STOP_PCT,
     PARTIAL_TP_PCT,
+    SPIKE_TRIGGER_PCT,
+    MIN_GAP_PCT,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,8 +76,8 @@ class IntradayBacktestConfig:
     max_daily_loss_pct: float = 0.05
 
     # ── 진입 조건 ─────────────────────────────────────────────────────────
-    gap_threshold_pct: float = 3.0       # 시가 갭 임계값 (%) - 기획서: 3%
-    spike_trigger_pct: float = 1.5       # 장중 시가 대비 스파이크 트리거 (%) - 기획서: 1.5%
+    gap_threshold_pct: float = MIN_GAP_PCT * 100       # 시가 갭 임계값 (%) — constants 단일 소스
+    spike_trigger_pct: float = SPIKE_TRIGGER_PCT * 100  # 스파이크 트리거 (%) — constants 단일 소스
     warmup_periods: int = 200            # 일봉 워밍업 기간 (ATR 계산용)
     buy_score_threshold: float = 75.0    # 전략 엔진 매수 점수 기준
 
