@@ -108,6 +108,12 @@ async def job_daily_report():
         except Exception as e:
             logger.warning(f"[TP분석] 실패: {e}")
 
+    # ── daily_summary 테이블에 저장 (주간 리포트 데이터 소스) ──
+    if report_builder.db.is_connected:
+        report_builder.db.save_daily_summary(report)
+    else:
+        logger.warning("[일일 리포트] DB 미연결 - daily_summary 저장 생략 (주간 리포트 영향)")
+
     await notifier.notify_daily_report(report, tp_analysis=tp_analysis)
     logger.info(f"✓ 일일 리포트 발송 완료 (PnL ${report['realized_pnl']:+,.2f})")
 

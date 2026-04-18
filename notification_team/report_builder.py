@@ -435,6 +435,36 @@ class ReportDatabase:
             logger.warning(f"[DB] TP 분석 결과 저장 실패: {e}")
             return False
 
+    def save_daily_summary(self, stats: Dict[str, Any]) -> bool:
+        """일일 통계를 daily_summary 테이블에 저장 (UPSERT)"""
+        sql = """
+            INSERT INTO daily_summary
+                (trade_date, total_trades, winning_trades, losing_trades,
+                 realized_pnl, ending_equity)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                total_trades   = VALUES(total_trades),
+                winning_trades = VALUES(winning_trades),
+                losing_trades  = VALUES(losing_trades),
+                realized_pnl   = VALUES(realized_pnl),
+                ending_equity  = VALUES(ending_equity)
+        """
+        try:
+            with self.get_cursor() as cursor:
+                cursor.execute(sql, (
+                    stats.get("trade_date"),
+                    stats.get("total_trades", 0),
+                    stats.get("winning_trades", 0),
+                    stats.get("losing_trades", 0),
+                    stats.get("realized_pnl", 0.0),
+                    stats.get("ending_equity", 0.0),
+                ))
+            logger.info(f"[DB] daily_summary 저장 완료: {stats.get('trade_date')}")
+            return True
+        except Exception as e:
+            logger.warning(f"[DB] daily_summary 저장 실패: {e}")
+            return False
+
     def get_tp_analysis_history(self, days: int = 30) -> List[Dict[str, Any]]:
         """최근 N일간 TP 분석 이력 조회"""
         sql = """
