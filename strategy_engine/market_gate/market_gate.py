@@ -51,30 +51,39 @@ class MarketGate:
         self.spy_daily_drop = spy_daily_drop
 
     def _fetch_spy_data(self):
-        """Alpaca로 SPY 최근 210일 일봉 조회 (200일 MA 계산용)"""
-        try:
-            from alpaca.data import StockHistoricalDataClient
-            from alpaca.data.requests import StockBarsRequest
-            from alpaca.data.timeframe import TimeFrame
-            from datetime import datetime, timedelta
+        """Alpaca로 SPY 최근 210일 일봉 조회 (200일 MA 계산용, 최대 3회 재시도)"""
+        import time
+        from alpaca.data import StockHistoricalDataClient
+        from alpaca.data.requests import StockBarsRequest
+        from alpaca.data.timeframe import TimeFrame
+        from datetime import datetime, timedelta
 
-            client = StockHistoricalDataClient(self.api_key, self.api_secret)
-            end = datetime.utcnow()
-            start = end - timedelta(days=300)  # 210 거래일 확보용 여유
+        client = StockHistoricalDataClient(self.api_key, self.api_secret)
+        end = datetime.utcnow()
+        start = end - timedelta(days=300)
 
-            req = StockBarsRequest(
-                symbol_or_symbols=["SPY"],
-                timeframe=TimeFrame.Day,
-                start=start,
-                end=end,
-            )
-            bars = client.get_stock_bars(req)
-            spy_bars = bars["SPY"]
-            closes = [float(b.close) for b in spy_bars]
-            return closes
-        except Exception as e:
-            logger.warning(f"SPY 데이터 조회 실패: {e}")
-            return None
+        req = StockBarsRequest(
+            symbol_or_symbols=["SPY"],
+            timeframe=TimeFrame.Day,
+            start=start,
+            end=end,
+            feed="iex",
+        )
+
+        for attempt in range(3):
+            try:
+                bars = client.get_stock_bars(req)
+                spy_bars = bars["SPY"]
+                closes = [float(b.close) for b in spy_bars]
+                return closes
+            except Exception as e:
+                wait = 2 ** attempt
+                if attempt < 2:
+                    logger.warning(f"SPY 데이터 조회 실패 (재시도 {attempt+1}/3, {wait}s 후): {e}")
+                    time.sleep(wait)
+                else:
+                    logger.error(f"SPY 데이터 조회 최종 실패 (3회 시도): {e}")
+        return None
 
     def _fetch_vix(self) -> Optional[float]:
         """
