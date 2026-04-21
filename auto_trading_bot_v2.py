@@ -193,10 +193,17 @@ class AutoTradingBotV2:
         self._symbol_strategy_types: Dict[str, str] = {}  # {symbol: "momentum"|"breakout"|"reversion"}
 
         # IMP-03: Trailing Stop 설정
-        self.trailing_stop_pct = float(os.getenv('TRAILING_STOP_PCT', '2.0'))        # 최고가 대비 -2% 청산
+        self.trailing_stop_pct = float(os.getenv('TRAILING_STOP_PCT', '5.0'))        # 최고가 대비 -5% 청산 (V4 백테스트 동일)
         self.partial_take_profit_pct = float(os.getenv('PARTIAL_TP_PCT', '3.0'))     # +3%에 50% 부분 청산
         self._highest_price: Dict[str, float] = {}   # {symbol: 진입 후 최고가}
         self._partial_tp_done: set = set()            # 부분 청산 완료 종목
+
+        # V4 Multi-Day Hold 설정 (백테스트 검증 기준)
+        self.v4_max_hold_days = int(os.getenv('V4_MAX_HOLD_DAYS', '10'))             # 최대 보유 거래일
+        self.v4_entry_start_minute = int(os.getenv('V4_ENTRY_START_MINUTE', '20'))   # 09:30+20 = 09:50 ET
+        self.v4_entry_end_hour = int(os.getenv('V4_ENTRY_END_HOUR', '10'))           # 10:15 ET 이후 진입 금지
+        self.v4_entry_end_minute = int(os.getenv('V4_ENTRY_END_MINUTE', '15'))
+        self._position_entry_date: Dict[str, "date"] = {}  # {symbol: 진입일} — 재시작 시 Alpaca로 복구
 
         # NEW-04: 일일 거래 횟수 제한
         self.max_entries_per_day = int(os.getenv('MAX_ENTRIES_PER_DAY', '5'))
@@ -267,7 +274,8 @@ class AutoTradingBotV2:
         logger.info("\n[2] Monitoring System 초기화 중...")
 
         try:
-            # 워치리스트 생성기 (Stage 1)
+            # 워치리스트 생성기 (Stage 1) — V4: ITC 16종목 고정 유니버스
+            from config.trading_constants import ITC_UNIVERSE
             self.watchlist_generator = WatchlistGenerator(
                 api_key=self.api_key,
                 api_secret=self.api_secret,
@@ -276,9 +284,10 @@ class AutoTradingBotV2:
                 max_watchlist_size=self.max_watchlist_size,
                 min_price=self.min_price,
                 min_avg_volume=self.min_avg_volume,
-                paper='paper-api' in self.base_url
+                paper='paper-api' in self.base_url,
+                fixed_universe=list(ITC_UNIVERSE),
             )
-            logger.info("✓ 워치리스트 생성기 초기화 완료")
+            logger.info(f"✓ 워치리스트 생성기 초기화 완료 (ITC {len(ITC_UNIVERSE)}종목 고정 유니버스)")
 
             # 갭 방향 검증기 (IMP-02)
             if GAP_VALIDATOR_AVAILABLE:
@@ -508,6 +517,28 @@ class AutoTradingBotV2:
         """매수 신호 실행 (내부)"""
         symbol = signal['symbol']
 
+        # V4 진입 시간 필터: 09:30+entry_start ~ entry_end ET 사이만 허용
+        try:
+            from zoneinfo import ZoneInfo
+            _et_tz = ZoneInfo("America/New_York")
+        except ImportError:
+            import pytz
+            _et_tz = pytz.timezone("America/New_York")
+        _now_et = datetime.now(_et_tz)
+        _entry_open = _now_et.replace(
+            hour=9, minute=30 + self.v4_entry_start_minute, second=0, microsecond=0
+        )
+        _entry_close = _now_et.replace(
+            hour=self.v4_entry_end_hour, minute=self.v4_entry_end_minute, second=0, microsecond=0
+        )
+        if self._is_market_hours() and not (_entry_open <= _now_et <= _entry_close):
+            logger.info(
+                f"{symbol} 진입 시간 외 — "
+                f"허용: {_entry_open.strftime('%H:%M')}~{_entry_close.strftime('%H:%M')} ET, "
+                f"현재: {_now_et.strftime('%H:%M')} ET"
+            )
+            return
+
         # NEW-04: 날짜 초기화 및 일일 진입 횟수 체크
         self._reset_daily_counts_if_needed()
         if self._daily_entry_count >= self.max_entries_per_day:
@@ -651,6 +682,9 @@ class AutoTradingBotV2:
                 # IMP-03: 최고가 초기화 (trailing stop 기준점)
                 self._highest_price[symbol] = filled_price
                 self._partial_tp_done.discard(symbol)
+                # V4 Multi-Day: 진입일 기록 (hold_days 카운트 기준)
+                from datetime import date as _d
+                self._position_entry_date[symbol] = _d.today()
                 self._log_trade_to_db(
                     symbol=symbol, action="BUY",
                     quantity=filled_qty, price=filled_price,
@@ -1011,6 +1045,88 @@ class AutoTradingBotV2:
                 positions = await loop.run_in_executor(
                     None, self.broker.api.list_positions
                 )
+
+                # ── V4 보유일 복구: 재시작 시 _position_entry_date에 없는 종목은
+                #    Alpaca position.entry_at 에서 진입일 추출 ──────────────────
+                from datetime import date as _today_date
+                for _pos in positions:
+                    _sym = _pos.symbol
+                    if _sym not in self._position_entry_date:
+                        try:
+                            _entry_at = getattr(_pos, 'entry_at', None) or getattr(_pos, 'created_at', None)
+                            if _entry_at:
+                                if hasattr(_entry_at, 'date'):
+                                    self._position_entry_date[_sym] = _entry_at.date()
+                                else:
+                                    from datetime import datetime as _dt
+                                    self._position_entry_date[_sym] = _dt.fromisoformat(str(_entry_at)[:10]).date()
+                            else:
+                                # entry_at 없으면 현재가 기준 (보수적: hold_days=0)
+                                self._position_entry_date[_sym] = _today_date.today()
+                        except Exception:
+                            self._position_entry_date[_sym] = _today_date.today()
+                        logger.info(f"[복구] {_sym} 진입일: {self._position_entry_date[_sym]}")
+                    # _highest_price 복구: 없으면 현재가로 초기화 (trailing 약간 느슨)
+                    if _sym not in self._highest_price:
+                        try:
+                            _cur = float(getattr(_pos, 'current_price', 0) or 0)
+                            if _cur > 0:
+                                self._highest_price[_sym] = _cur
+                                logger.info(f"[복구] {_sym} 최고가: ${_cur:.2f} (현재가 기준 초기화)")
+                        except Exception:
+                            pass
+
+                # ── V4 EOD 강제 청산: 15:55 ET, max_hold_days 초과 포지션만 ──
+                now_et_eod = datetime.now(_et)
+                _eod_h, _eod_m = now_et_eod.hour, now_et_eod.minute
+                _is_eod_window = is_market and (_eod_h == 15 and _eod_m >= 55)
+                if _is_eod_window:
+                    from datetime import date as _d2
+                    _today = _d2.today()
+                    for _pos in positions:
+                        _sym = _pos.symbol
+                        _entry = self._position_entry_date.get(_sym)
+                        if _entry is None:
+                            continue
+                        _hold = (_today - _entry).days
+                        if _hold < self.v4_max_hold_days:
+                            continue
+                        if _sym in self._pending_sell_symbols:
+                            continue
+                        try:
+                            _qty = int(float(_pos.qty))
+                            _px  = float(getattr(_pos, 'current_price', 0) or 0)
+                            self._pending_sell_symbols.add(_sym)
+                            await loop.run_in_executor(
+                                None,
+                                lambda s=_sym, q=_qty: self.broker.api.submit_order(
+                                    symbol=s, qty=q, side='sell',
+                                    type='market', time_in_force='day'
+                                )
+                            )
+                            logger.warning(
+                                f"[EOD 강제 청산] {_sym} | 보유 {_hold}일 ≥ {self.v4_max_hold_days}일 → 시장가 매도"
+                            )
+                            self._position_entry_date.pop(_sym, None)
+                            self._highest_price.pop(_sym, None)
+                            self._partial_tp_done.discard(_sym)
+                            self._daily_exit_count += 1
+                            _unrealized = float(getattr(_pos, 'unrealized_pl', 0) or 0)
+                            _pl_pct = float(getattr(_pos, 'unrealized_plpc', 0) or 0) * 100
+                            self._log_trade_to_db(
+                                symbol=_sym, action="EOD_FORCE",
+                                quantity=_qty, price=_px, pnl=_unrealized,
+                                reason=f"V4 max_hold {_hold}일 초과"
+                            )
+                            self._send_telegram_notify(
+                                "sell", symbol=_sym, filled_price=_px,
+                                quantity=_qty, pnl=_unrealized,
+                                pnl_pct=_pl_pct, sell_type="EOD_FORCE"
+                            )
+                        except Exception as _eoderr:
+                            self._pending_sell_symbols.discard(_sym)
+                            logger.error(f"[EOD 강제 청산] {_sym} 주문 실패: {_eoderr}")
+
                 for position in positions:
                     try:
                         pl_pct = float(position.unrealized_plpc) * 100.0
@@ -1077,8 +1193,8 @@ class AutoTradingBotV2:
                                 logger.error(f"[부분익절] {symbol} 주문 실패: {_pe}")
                             continue
 
-                        # Trailing Stop 히트
-                        if current_price <= trailing_stop_price and pl_pct > 0:
+                        # Trailing Stop 히트 (V4 백테스트 동일: 손실 구간도 작동)
+                        if current_price <= trailing_stop_price:
                             sell_type = "TRAILING_STOP"
                             logger.warning(
                                 f"[트레일링스탑] {symbol}: 현재가 ${current_price:.2f} ≤ "
@@ -1164,9 +1280,10 @@ class AutoTradingBotV2:
                         )
                         # 쿨다운 등록: 매도 완료 후 동일 종목 재진입 방지
                         self._recently_sold[symbol] = datetime.now()
-                        # IMP-03: 최고가/부분청산 상태 초기화
+                        # IMP-03: 최고가/부분청산/진입일 상태 초기화
                         self._highest_price.pop(symbol, None)
                         self._partial_tp_done.discard(symbol)
+                        self._position_entry_date.pop(symbol, None)
                         self._daily_exit_count += 1
                         logger.info(
                             f"[쿨다운 등록] {symbol} → {self.trade_cooldown_minutes}분간 재매수 차단"

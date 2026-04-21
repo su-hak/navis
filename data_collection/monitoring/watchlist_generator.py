@@ -48,7 +48,8 @@ class WatchlistGenerator:
         max_watchlist_size: int = 20,
         min_price: float = 5.0,               # 최소 주가 ($5 이하 개잡주 제외)
         min_avg_volume: int = 500000,          # 최소 평균 거래량 (유동성 확보)
-        paper: bool = True
+        paper: bool = True,
+        fixed_universe: Optional[List[str]] = None,  # 고정 유니버스 (None = 동적 조회)
     ):
         self.client = StockHistoricalDataClient(api_key, api_secret)
         self.trading_client = TradingClient(api_key, api_secret, paper=paper)
@@ -57,8 +58,9 @@ class WatchlistGenerator:
         self.max_watchlist_size = max_watchlist_size
         self.min_price = min_price
         self.min_avg_volume = min_avg_volume
+        self.fixed_universe = fixed_universe  # 설정 시 동적 조회 대신 고정 목록 사용
 
-        # 유니버스 캐시 (일 1회 갱신)
+        # 유니버스 캐시 (일 1회 갱신) — fixed_universe 설정 시 사용하지 않음
         self._universe_cache: List[str] = []
         self._universe_last_refresh: Optional[datetime] = None
 
@@ -66,8 +68,8 @@ class WatchlistGenerator:
         self._volume_cache: Dict[str, float] = {}
         self._volume_last_refresh: Optional[datetime] = None
 
-        # 폴백 유니버스 (Alpaca API 실패 시 사용)
-        self._fallback_universe = self._get_default_universe()
+        # 폴백 유니버스 (Alpaca API 실패 시 사용) — fixed_universe 설정 시 해당 목록이 폴백
+        self._fallback_universe = fixed_universe if fixed_universe else self._get_default_universe()
         self.universe = self._fallback_universe
 
     def _get_default_universe(self) -> List[str]:
@@ -136,10 +138,14 @@ class WatchlistGenerator:
         """
         Alpaca assets API에서 활성 US 주식 유니버스 동적 조회
 
+        - fixed_universe 설정 시 즉시 반환 (동적 조회 생략)
         - NASDAQ/NYSE/ARCA/BATS 상장 종목만 포함 (OTC 제외)
         - 거래 가능(tradable) 종목만 포함
         - 일 1회 캐싱
         """
+        if self.fixed_universe:
+            return self.fixed_universe
+
         now = datetime.now(timezone.utc)
 
         # 캐시 유효 시 재사용

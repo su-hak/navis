@@ -1,0 +1,466 @@
+[
+  {
+    "symbol_a": "C",
+    "symbol_b": "STT",
+    "sector": "Financial Services",
+    "pvalue": 1.9e-05,
+    "corr": 0.6088,
+    "hedge_ratio": 1.384377
+  },
+  {
+    "symbol_a": "MSCI",
+    "symbol_b": "SPGI",
+    "sector": "Financial Services",
+    "pvalue": 0.00066,
+    "corr": 0.6705,
+    "hedge_ratio": 0.198257
+  },
+  {
+    "symbol_a": "MTD",
+    "symbol_b": "TMO",
+    "sector": "Healthcare",
+    "pvalue": 0.000763,
+    "corr": 0.7367,
+    "hedge_ratio": 0.61466
+  },
+  {
+    "symbol_a": "MSCI",
+    "symbol_b": "NDAQ",
+    "sector": "Financial Services",
+    "pvalue": 0.000774,
+    "corr": 0.6029,
+    "hedge_ratio": 0.243066
+  },
+  {
+    "symbol_a": "AON",
+    "symbol_b": "AJG",
+    "sector": "Financial Services",
+    "pvalue": 0.001677,
+    "corr": 0.7221,
+    "hedge_ratio": 0.247777
+  },
+  {
+    "symbol_a": "LRCX",
+    "symbol_b": "MU",
+    "sector": "Technology",
+    "pvalue": 0.003467,
+    "corr": 0.7478,
+    "hedge_ratio": 0.703512
+  },
+  {
+    "symbol_a": "BK",
+    "symbol_b": "C",
+    "sector": "Financial Services",
+    "pvalue": 0.003648,
+    "corr": 0.6285,
+    "hedge_ratio": 0.74377
+  },
+  {
+    "symbol_a": "FITB",
+    "symbol_b": "KEY",
+    "sector": "Financial Services",
+    "pvalue": 0.004026,
+    "corr": 0.8422,
+    "hedge_ratio": 0.910325
+  },
+  {
+    "symbol_a": "CMS",
+    "symbol_b": "EXC",
+    "sector": "Utilities",
+    "pvalue": 0.004102,
+    "corr": 0.7103,
+    "hedge_ratio": 0.735599
+  },
+  {
+    "symbol_a": "ALL",
+    "symbol_b": "TRV",
+    "sector": "Financial Services",
+    "pvalue": 0.008299,
+    "corr": 0.6965,
+    "hedge_ratio": 0.455837
+  },
+  {
+    "symbol_a": "CTRA",
+    "symbol_b": "FANG",
+    "sector": "Energy",
+    "pvalue": 0.008889,
+    "corr": 0.6143,
+    "hedge_ratio": 1.029049
+  },
+  {
+    "symbol_a": "KLAC",
+    "symbol_b": "MU",
+    "sector": "Technology",
+    "pvalue": 0.009257,
+    "corr": 0.6164,
+    "hedge_ratio": 0.450421
+  },
+  {
+    "symbol_a": "DUK",
+    "symbol_b": "PPL",
+    "sector": "Utilities",
+    "pvalue": 0.010884,
+    "corr": 0.7063,
+    "hedge_ratio": 0.915719
+  },
+  {
+    "symbol_a": "BK",
+    "symbol_b": "STT",
+    "sector": "Financial Services",
+    "pvalue": 0.012766,
+    "corr": 0.7277,
+    "hedge_ratio": 1.037858
+  },
+  {
+    "symbol_a": "CHD",
+    "symbol_b": "CL",
+    "sector": "Consumer Defensive",
+    "pvalue": 0.013206,
+    "corr": 0.6226,
+    "hedge_ratio": 0.871282
+  },
+  {
+    "symbol_a": "ALL",
+    "symbol_b": "CB",
+    "sector": "Financial Services",
+    "pvalue": 0.014046,
+    "corr": 0.6291,
+    "hedge_ratio": 0.245883
+  },
+  {
+    "symbol_a": "ALL",
+    "symbol_b": "PGR",
+    "sector": "Financial Services",
+    "pvalue": 0.014944,
+    "corr": 0.6952,
+    "hedge_ratio": -0.056294
+  },
+  {
+    "symbol_a": "LRCX",
+    "symbol_b": "WDC",
+    "sector": "Technology",
+    "pvalue": 0.015341,
+    "corr": 0.6236,
+    "hedge_ratio": 0.603773
+  },
+  {
+    "symbol_a": "JPM",
+    "symbol_b": "SYF",
+    "sector": "Financial Services",
+    "pvalue": 0.017808,
+    "corr": 0.6179,
+    "hedge_ratio": 0.572553
+  },
+  {
+    "symbol_a": "DVN",
+    "symbol_b": "FANG",
+    "sector": "Energy",
+    "pvalue": 0.019707,
+    "corr": 0.8511,
+    "hedge_ratio": 1.269157
+  },
+  {
+    "symbol_a": "KLAC",
+    "symbol_b": "LRCX",
+    "sector": "Technology",
+    "pvalue": 0.021954,
+    "corr": 0.8621,
+    "hedge_ratio": 0.642531
+  },
+  {
+    "symbol_a": "PSX",
+    "symbol_b": "VLO",
+    "sector": "Energy",
+    "pvalue": 0.023126,
+    "corr": 0.8104,
+    "hedge_ratio": 0.643016
+  },
+  {
+    "symbol_a": "CTRA",
+    "symbol_b": "DVN",
+    "sector": "Energy",
+    "pvalue": 0.025125,
+    "corr": 0.6472,
+    "hedge_ratio": 0.777023
+  },
+  {
+    "symbol_a": "DVN",
+    "symbol_b": "XOM",
+    "sector": "Energy",
+    "pvalue": 0.025713,
+    "corr": 0.7228,
+    "hedge_ratio": 0.955065
+  },
+  {
+    "symbol_a": "MCO",
+    "symbol_b": "SPGI",
+    "sector": "Financial Services",
+    "pvalue": 0.02618,
+    "corr": 0.8776,
+    "hedge_ratio": 0.618581
+  },
+  {
+    "symbol_a": "CMS",
+    "symbol_b": "DUK",
+    "sector": "Utilities",
+    "pvalue": 0.027489,
+    "corr": 0.798,
+    "hedge_ratio": 0.824955
+  },
+  {
+    "symbol_a": "CFG",
+    "symbol_b": "GS",
+    "sector": "Financial Services",
+    "pvalue": 0.030022,
+    "corr": 0.6421,
+    "hedge_ratio": 1.00991
+  },
+  {
+    "symbol_a": "EXC",
+    "symbol_b": "FE",
+    "sector": "Utilities",
+    "pvalue": 0.036917,
+    "corr": 0.7616,
+    "hedge_ratio": 0.499631
+  },
+  {
+    "symbol_a": "STX",
+    "symbol_b": "WDC",
+    "sector": "Technology",
+    "pvalue": 0.037676,
+    "corr": 0.882,
+    "hedge_ratio": 0.758227
+  },
+  {
+    "symbol_a": "CMS",
+    "symbol_b": "PPL",
+    "sector": "Utilities",
+    "pvalue": 0.038763,
+    "corr": 0.7405,
+    "hedge_ratio": 0.791667
+  },
+  {
+    "symbol_a": "COF",
+    "symbol_b": "TROW",
+    "sector": "Financial Services",
+    "pvalue": 0.039983,
+    "corr": 0.6136,
+    "hedge_ratio": 1.169176
+  },
+  {
+    "symbol_a": "FANG",
+    "symbol_b": "XOM",
+    "sector": "Energy",
+    "pvalue": 0.041284,
+    "corr": 0.6972,
+    "hedge_ratio": 0.714064
+  },
+  {
+    "symbol_a": "LRCX",
+    "symbol_b": "TER",
+    "sector": "Technology",
+    "pvalue": 0.044431,
+    "corr": 0.656,
+    "hedge_ratio": 0.786347
+  },
+  {
+    "symbol_a": "LRCX",
+    "symbol_b": "STX",
+    "sector": "Technology",
+    "pvalue": 0.04689,
+    "corr": 0.6128,
+    "hedge_ratio": 0.786224
+  },
+  {
+    "symbol_a": "MRK",
+    "symbol_b": "PFE",
+    "sector": "Healthcare",
+    "pvalue": 0.051681,
+    "corr": 0.6269,
+    "hedge_ratio": 2.490369
+  },
+  {
+    "symbol_a": "NCLH",
+    "symbol_b": "RCL",
+    "sector": "Consumer Cyclical",
+    "pvalue": 0.055169,
+    "corr": 0.7204,
+    "hedge_ratio": 0.868984
+  },
+  {
+    "symbol_a": "FITB",
+    "symbol_b": "TFC",
+    "sector": "Financial Services",
+    "pvalue": 0.059282,
+    "corr": 0.8465,
+    "hedge_ratio": 1.115336
+  },
+  {
+    "symbol_a": "ADBE",
+    "symbol_b": "CRM",
+    "sector": "Technology",
+    "pvalue": 0.060941,
+    "corr": 0.6873,
+    "hedge_ratio": 1.107342
+  },
+  {
+    "symbol_a": "IQV",
+    "symbol_b": "MTD",
+    "sector": "Healthcare",
+    "pvalue": 0.061683,
+    "corr": 0.6016,
+    "hedge_ratio": 1.508782
+  },
+  {
+    "symbol_a": "TER",
+    "symbol_b": "WDC",
+    "sector": "Technology",
+    "pvalue": 0.062353,
+    "corr": 0.6031,
+    "hedge_ratio": 0.751483
+  },
+  {
+    "symbol_a": "IR",
+    "symbol_b": "GWW",
+    "sector": "Industrials",
+    "pvalue": 0.063303,
+    "corr": 0.6461,
+    "hedge_ratio": 0.76088
+  },
+  {
+    "symbol_a": "CFG",
+    "symbol_b": "STT",
+    "sector": "Financial Services",
+    "pvalue": 0.065258,
+    "corr": 0.6827,
+    "hedge_ratio": 1.312923
+  },
+  {
+    "symbol_a": "BLK",
+    "symbol_b": "TROW",
+    "sector": "Financial Services",
+    "pvalue": 0.065547,
+    "corr": 0.6463,
+    "hedge_ratio": 0.948269
+  },
+  {
+    "symbol_a": "C",
+    "symbol_b": "CFG",
+    "sector": "Financial Services",
+    "pvalue": 0.069629,
+    "corr": 0.6973,
+    "hedge_ratio": 1.01945
+  },
+  {
+    "symbol_a": "MCHP",
+    "symbol_b": "TXN",
+    "sector": "Technology",
+    "pvalue": 0.074613,
+    "corr": 0.765,
+    "hedge_ratio": 1.157037
+  },
+  {
+    "symbol_a": "MLM",
+    "symbol_b": "VMC",
+    "sector": "Basic Materials",
+    "pvalue": 0.07679,
+    "corr": 0.8735,
+    "hedge_ratio": 1.103211
+  },
+  {
+    "symbol_a": "D",
+    "symbol_b": "DUK",
+    "sector": "Utilities",
+    "pvalue": 0.079429,
+    "corr": 0.6665,
+    "hedge_ratio": 0.858917
+  },
+  {
+    "symbol_a": "CVX",
+    "symbol_b": "PSX",
+    "sector": "Energy",
+    "pvalue": 0.079749,
+    "corr": 0.6599,
+    "hedge_ratio": 0.769684
+  },
+  {
+    "symbol_a": "EXC",
+    "symbol_b": "XEL",
+    "sector": "Utilities",
+    "pvalue": 0.081845,
+    "corr": 0.6204,
+    "hedge_ratio": 0.528693
+  },
+  {
+    "symbol_a": "VTR",
+    "symbol_b": "WELL",
+    "sector": "Real Estate",
+    "pvalue": 0.081997,
+    "corr": 0.7299,
+    "hedge_ratio": 0.858635
+  },
+  {
+    "symbol_a": "XOM",
+    "symbol_b": "PSX",
+    "sector": "Energy",
+    "pvalue": 0.08342,
+    "corr": 0.6156,
+    "hedge_ratio": 0.946245
+  },
+  {
+    "symbol_a": "GEHC",
+    "symbol_b": "MTD",
+    "sector": "Healthcare",
+    "pvalue": 0.089797,
+    "corr": 0.6475,
+    "hedge_ratio": 0.58344
+  },
+  {
+    "symbol_a": "CMS",
+    "symbol_b": "FE",
+    "sector": "Utilities",
+    "pvalue": 0.091444,
+    "corr": 0.732,
+    "hedge_ratio": 0.399094
+  },
+  {
+    "symbol_a": "BLK",
+    "symbol_b": "BX",
+    "sector": "Financial Services",
+    "pvalue": 0.093037,
+    "corr": 0.6891,
+    "hedge_ratio": 0.36415
+  },
+  {
+    "symbol_a": "HUBB",
+    "symbol_b": "PH",
+    "sector": "Industrials",
+    "pvalue": 0.093189,
+    "corr": 0.6041,
+    "hedge_ratio": 0.648396
+  },
+  {
+    "symbol_a": "CMS",
+    "symbol_b": "ETR",
+    "sector": "Utilities",
+    "pvalue": 0.094127,
+    "corr": 0.6434,
+    "hedge_ratio": 0.316497
+  },
+  {
+    "symbol_a": "MCO",
+    "symbol_b": "MSCI",
+    "sector": "Financial Services",
+    "pvalue": 0.098404,
+    "corr": 0.6742,
+    "hedge_ratio": 1.279363
+  },
+  {
+    "symbol_a": "NXPI",
+    "symbol_b": "QCOM",
+    "sector": "Technology",
+    "pvalue": 0.099763,
+    "corr": 0.6553,
+    "hedge_ratio": 0.368226
+  }
+]
