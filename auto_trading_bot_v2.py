@@ -1160,6 +1160,26 @@ class AutoTradingBotV2:
                         if (pl_pct >= self.partial_take_profit_pct
                                 and symbol not in self._partial_tp_done
                                 and qty >= 2):
+                            # 재시작 후 중복 방지: Alpaca open sell 주문 실시간 확인
+                            try:
+                                _open_partial = await loop.run_in_executor(
+                                    None,
+                                    lambda s=symbol: self.broker.api.list_orders(
+                                        status='open', symbols=[s]
+                                    )
+                                )
+                                _has_pending_sell = any(
+                                    getattr(o, 'side', '') == 'sell' for o in _open_partial
+                                )
+                            except Exception:
+                                _has_pending_sell = symbol in self._pending_sell_symbols
+
+                            if _has_pending_sell:
+                                # 이미 pending sell 존재 → 부분 청산 완료로 간주하고 재시도 방지
+                                self._partial_tp_done.add(symbol)
+                                logger.info(f"[부분익절 스킵] {symbol} — 미체결 매도 주문 존재, 완료 처리")
+                                continue
+
                             partial_qty = qty // 2
                             logger.warning(
                                 f"[부분익절] {symbol}: {pl_pct:.2f}% ≥ "
