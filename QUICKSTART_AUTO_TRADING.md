@@ -137,10 +137,11 @@ TRADING_INTERVAL_MINUTES=60      # 60분마다 분석
 ### 브로커 설정
 
 ```bash
-ALPACA_API_KEY=PKUOJ4ZWX5NMWO24NVSXZF2P5L
-ALPACA_SECRET_KEY=DRg4ASRoHtg3cF1QiqXaprzs4b6SGViywRMSeV78xjyW
+ALPACA_API_KEY=PKxxxxxxxxxxxxxxxxxxxx
+ALPACA_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ALPACA_BASE_URL=https://paper-api.alpaca.markets  ← Paper Trading
 ```
+> ⚠️ 2026-09-13: 이 문서에 실제 Alpaca API 키/시크릿이 노출되어 있던 것을 발견해 플레이스홀더로 교체했습니다. 해당 키는 폐기(rotate)하십시오.
 
 **⚠️ 중요**: 현재 **Paper Trading** 모드입니다 (가상 돈 사용)
 
