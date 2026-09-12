@@ -1,15 +1,20 @@
 """
-NAVIS 팩터 모멘텀 백테스트 엔진 (P15)
+NAVIS 팩터 백테스트 엔진
 
-전략:
+P15 모드 (use_multi_factor=False):
   매월 말 S&P 500 전 종목의 12-1 모멘텀 계산 → 상위 20% 동일 비중 매수
-  1개월 보유 후 다음 달 말 리밸런싱 반복.
-  5분봉 불필요 — 월말 종가 기준 신호, 익월 첫 거래일 시가 진입/청산.
 
-합격 기준 (NAVIS_STRATEGY_B_FACTOR_MOMENTUM.md):
-  합격:       CAGR ≥ 15% AND Sharpe ≥ 0.8
-  부분 합격:  CAGR ≥ 10% AND Sharpe ≥ 0.6
-  실패:       위 조건 미달
+NAVIS ALPHA v1.0 모드 (use_multi_factor=True, 기본값) — P24 확정:
+  4팩터 복합 점수(Quality 35 + Value 40 + Momentum 25 + Catalyst 0 = 100점)
+  Layer 3 하드 필터: Value Trap + 성장 필터 (multi_factor_scorer 내부 적용)
+  진입 거부: MAX_ATR_RATIO = 0.05 (과고변동성 종목 제거)
+  인트라-피리어드 스탑: 없음 (P24 영구 제거)
+  청산 시점: 월간 리밸런싱 Score 탈락 시에만
+
+Walk-Forward 검증 결과 (P24):
+  OOS 2022~2026 CAGR 12.16%, Sharpe 0.688, MDD -14.16%
+  10년 전체(2016~2026) CAGR 34.56% (2020 +135% 포함)
+  2020 제외 9년 CAGR 12.88%, Sharpe ~0.86
 """
 from __future__ import annotations
 
@@ -22,6 +27,7 @@ import numpy as np
 import pandas as pd
 
 from .factor_calculator import calc_momentum_12_1, calc_avg_dollar_volume, rank_momentum
+from .multi_factor_scorer import MultiFactorScorer
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +40,24 @@ class FactorBacktestConfig:
     # 팩터 파라미터
     momentum_lookback: int   = 252    # 12개월 = 252거래일
     momentum_skip:     int   = 21     # 최근 1개월 제외
-    top_pct:           float = 0.20   # 상위 20% 선택
+    top_pct:           float = 0.10   # P19 확정: 상위 10% (P15 기본값 0.20)
 
     # 유동성 필터
-    min_dollar_volume: float = 5e7    # 일평균 $5,000만 이상
+    min_dollar_volume: float = 2e6    # P19: 일평균 $200만 이상 (소형 우량주 포함)
     min_price:         float = 5.0    # $5 이상
 
     # 포지션 관리
     max_position_pct:  float = 0.05   # 단일 종목 최대 5% (캡)
+
+    # NAVIS ALPHA v1.0 Multi-Factor 설정 (P24 확정)
+    use_multi_factor:      bool  = True   # True=NAVIS ALPHA 복합 점수, False=P15 순수 모멘텀
+    min_composite_score:   float = 25.0   # 복합 점수 절대 컷오프 (0~100)
+    fund_dir:              str   = "data/fundamentals"
+    sector_map_path:       str   = "data/universe/sector_map.parquet"
+    form4_cache_dir:       str   = "data/form4/cache"
+
+    # P21 확정: 제외 섹터 (금융지주, 리츠 — 팩터 왜곡 발생)
+    exclude_sectors:       tuple = ("Financials", "Real Estate")
 
     # 비용
     commission_rate:   float = 0.001  # 0.1%
@@ -73,12 +89,21 @@ class FactorBacktestEngine:
     ):
         self.config     = config
         self.daily_data = daily_data
-        self.spy_daily  = spy_daily   # 벤치마크 비교용
+        self.spy_daily  = spy_daily
         self.capital    = config.initial_capital
-        self.portfolio: Dict[str, dict] = {}   # {symbol: {"qty", "entry_price", "entry_date"}}
+        self.portfolio: Dict[str, dict] = {}
         self.trade_log: List[dict]      = []
         self.equity_curve: List[Tuple[date, float]] = []
         self.monthly_returns: List[dict] = []
+
+        if config.use_multi_factor:
+            self.scorer = MultiFactorScorer(
+                fund_dir        = config.fund_dir,
+                sector_map_path = config.sector_map_path,
+                form4_cache_dir = config.form4_cache_dir,
+            )
+        else:
+            self.scorer = None
 
     # ── 메인 실행 ─────────────────────────────────────────────────────────
 
@@ -146,28 +171,44 @@ class FactorBacktestEngine:
           4. 기존 보유 종목 비중 재조정
         """
         # ── 1. 팩터 계산 ────────────────────────────────────────────────
-        scores: Dict[str, float] = {}
+        # 유동성·가격·제외섹터 사전 필터
+        # ATR 진입 거부(MAX_ATR_RATIO)는 multi_factor_scorer 내부에서 처리
+        sector_map = self.scorer._sector_map if self.config.use_multi_factor and self.scorer else {}
+        liquid_syms = []
         for sym in self.config.symbols:
             df = self.daily_data.get(sym)
             if df is None or len(df) == 0:
                 continue
-
-            # 유동성 필터
             dv = calc_avg_dollar_volume(df, rebalance_date, window=21)
             if dv < self.config.min_dollar_volume:
                 continue
-
-            # 가격 필터
             price = self._get_price(df, rebalance_date, "close")
             if price is None or price < self.config.min_price:
                 continue
-
-            # 12-1 모멘텀
-            mom = calc_momentum_12_1(df, rebalance_date)
-            if mom is None:
+            if sector_map.get(sym) in self.config.exclude_sectors:
                 continue
+            liquid_syms.append(sym)
 
-            scores[sym] = mom
+        if not liquid_syms:
+            logger.warning(f"[FactorBT] {rebalance_date}: 유동성 통과 종목 0개, 건너뜀")
+            return
+
+        if self.config.use_multi_factor:
+            # NAVIS ALPHA v1.0 모드: 4팩터 복합 점수 (Layer 3 하드 필터 포함)
+            scores = self.scorer.score_universe(
+                liquid_syms, rebalance_date, self.daily_data
+            )
+            # 절대 컷오프 적용
+            scores = {s: v for s, v in scores.items()
+                      if v >= self.config.min_composite_score}
+        else:
+            # P15 모드: 순수 모멘텀
+            scores: Dict[str, float] = {}
+            for sym in liquid_syms:
+                df = self.daily_data.get(sym)
+                mom = calc_momentum_12_1(df, rebalance_date)
+                if mom is not None:
+                    scores[sym] = mom
 
         if not scores:
             logger.warning(f"[FactorBT] {rebalance_date}: 유효 종목 0개, 리밸런싱 건너뜀")
@@ -176,9 +217,11 @@ class FactorBacktestEngine:
         # ── 2. 상위 top_pct 선별 ────────────────────────────────────────
         target_symbols = set(rank_momentum(scores, self.config.top_pct))
         n_target = len(target_symbols)
+        mode_label = f"복합점수(MIN={self.config.min_composite_score})" if self.config.use_multi_factor else "모멘텀"
         logger.debug(
-            f"[FactorBT] {rebalance_date}: 유효={len(scores)}종목, "
-            f"선택={n_target}종목 (상위 {self.config.top_pct*100:.0f}%)"
+            f"[FactorBT] {rebalance_date}: 유동성={len(liquid_syms)} → "
+            f"{mode_label} 통과={len(scores)} → 선택={n_target}종목 "
+            f"(상위 {self.config.top_pct*100:.0f}%)"
         )
 
         # ── 3. 전체 자산 계산 (청산 전 기준) ────────────────────────────
@@ -240,13 +283,14 @@ class FactorBacktestEngine:
                     "entry_price": entry_price,
                     "entry_date":  str(exec_date),
                 }
+                score_key = "composite_score" if self.config.use_multi_factor else "momentum_score"
                 self.trade_log.append({
                     "date":   str(exec_date),
                     "symbol": sym,
                     "action": "BUY",
                     "price":  round(entry_price, 4),
                     "qty":    target_qty,
-                    "momentum_score": round(scores.get(sym, 0), 4),
+                    score_key: round(scores.get(sym, 0), 4),
                 })
 
     def _close_position(self, sym: str, exec_date: date) -> None:

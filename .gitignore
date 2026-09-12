@@ -61,3 +61,10 @@ htmlcov/
 *.tmp
 *.bak
 .cache/
+
+# Generated backtest data / caches (not source, regenerable)
+/cache/
+/backtest_results/
+/earnings_cache.json
+/backtest_*.txt
+/backtest_build_log.txt
