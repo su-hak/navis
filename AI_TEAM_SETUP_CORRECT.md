@@ -27,12 +27,12 @@ AI Team은 **Anthropic Claude API**를 사용합니다 (뉴스 분석, AI Agent 
 ANTHROPIC_API_KEY=sk-ant-api03-your-actual-key-here
 ```
 
-**이미 있는 것 확인됨**:
+**설정 예시** (실제 값은 `.env` 파일에만 저장하고 커밋하지 마세요):
 ```bash
-ANTHROPIC_API_KEY=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
+ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-✅ 이미 설정되어 있습니다!
+> ⚠️ 2026-09-13: 이 문서에 실제 API 키가 노출되어 있던 것을 발견해 플레이스홀더로 교체했습니다. 해당 키는 폐기(rotate)하십시오.
 
 ---
 
